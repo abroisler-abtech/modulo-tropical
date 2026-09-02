@@ -6,52 +6,57 @@ from supabase import create_client, Client
 
 st.set_page_config(page_title="Módulo Tropical - Sistema de Expedição", layout="wide", page_icon="🌴")
 
+# CSS Personalizado: Centralização absoluta e alinhamento do texto
 st.markdown("""
 <style>
     .card-laranja {
         background-color: #d35400;
         border: 2px solid #e67e22;
         border-radius: 10px;
-        padding: 10px 5px;
-        text-align: center;
+        padding: 12px 4px;
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
         margin-bottom: 10px;
         display: flex;
         flex-direction: column;
         justify-content: center;
         align-items: center;
-        min-height: 85px;
+        text-align: center;
+        min-height: 95px;
+        width: 100%;
     }
     .card-verde {
         background-color: #1e8449;
         border: 2px solid #27ae60;
         border-radius: 10px;
-        padding: 10px 5px;
-        text-align: center;
+        padding: 12px 4px;
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
         margin-bottom: 10px;
         display: flex;
         flex-direction: column;
         justify-content: center;
         align-items: center;
-        min-height: 85px;
+        text-align: center;
+        min-height: 95px;
+        width: 100%;
     }
     .card-titulo {
         color: #ffffff;
         font-size: 11px;
-        font-weight: bold;
+        font-weight: 700;
         text-transform: uppercase;
-        margin-bottom: 4px;
+        margin-bottom: 6px;
         text-align: center;
         width: 100%;
+        line-height: 1.2;
     }
     .card-valor {
         color: #ffffff;
-        font-size: 17px;
-        font-weight: bold;
-        white-space: nowrap;
+        font-size: 16px;
+        font-weight: 800;
         text-align: center;
         width: 100%;
+        line-height: 1.2;
+        word-wrap: break-word;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -135,8 +140,8 @@ def exibir_metricas_detalhadas(df, col_qtd, col_uni, col_rota, col_empresa, col_
     k1, k2, k3, k4, k5, k6 = st.columns(6)
     k1.markdown(f'<div class="card-verde"><div class="card-titulo">CX Peso</div><div class="card-valor">{fmt_br_int(cx_kg)} cx</div></div>', unsafe_allow_html=True)
     k2.markdown(f'<div class="card-verde"><div class="card-titulo">CX Und</div><div class="card-valor">{fmt_br_int(cx_un)} cx</div></div>', unsafe_allow_html=True)
-    k3.markdown(f'<div class="card-verde"><div class="card-titulo">Ovo PVC</div><div class="card-valor">{fmt_br_int(cx_ovo_pvc)} cx ({fmt_br_int(bj_pvc)} bj)</div></div>', unsafe_allow_html=True)
-    k4.markdown(f'<div class="card-verde"><div class="card-titulo">Ovo Comum</div><div class="card-valor">{fmt_br_int(cx_ovo_comum)} cx ({fmt_br_int(bj_comum)} bj)</div></div>', unsafe_allow_html=True)
+    k3.markdown(f'<div class="card-verde"><div class="card-titulo">Ovo PVC</div><div class="card-valor">{fmt_br_int(cx_ovo_pvc)} cx<br><span style="font-size:12px; font-weight:normal;">({fmt_br_int(bj_pvc)} bj)</span></div></div>', unsafe_allow_html=True)
+    k4.markdown(f'<div class="card-verde"><div class="card-titulo">Ovo Comum</div><div class="card-valor">{fmt_br_int(cx_ovo_comum)} cx<br><span style="font-size:12px; font-weight:normal;">({fmt_br_int(bj_comum)} bj)</span></div></div>', unsafe_allow_html=True)
     k5.markdown(f'<div class="card-verde"><div class="card-titulo">CX Outros</div><div class="card-valor">{fmt_br_int(cx_outros)} cx</div></div>', unsafe_allow_html=True)
     k6.markdown(f'<div class="card-verde"><div class="card-titulo">Total de Caixas</div><div class="card-valor">{fmt_br_int(cx_total_geral)} cx</div></div>', unsafe_allow_html=True)
 
