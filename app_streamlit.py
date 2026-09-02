@@ -319,11 +319,11 @@ elif modulo == "🚚 Carregamento & Rotas":
         st.info("💡 Para visualizar as rotas e cargas por veículo, primeiro suba a planilha em '📋 Separação do Dia'.")
 
 # -------------------------------------------------------------------
-# 3. PREVISÃO DE IA AUTOMÁTICA E PROTEGIDA
+# 3. PREVISÃO DE IA BASEADA NA OPERAÇÃO REAL
 # -------------------------------------------------------------------
 elif modulo == "🔮 Previsão de IA":
-    st.header("🔮 Previsão de Produtividade do Galpão com IA")
-    st.caption("A inteligência analisa os dados da carga e estima o tempo exato de separação do turno.")
+    st.header("🔮 Previsão de Produtividade & Dimensionamento de Galpão")
+    st.caption("Cálculo calibrated com base na produtividade real da equipe (1.110 caixas em ~2h com 41 separadores).")
 
     df_base = None
     if 'df_separacao' in st.session_state and st.session_state['df_separacao'] is not None:
@@ -336,48 +336,39 @@ elif modulo == "🔮 Previsão de IA":
     if df_base is not None and not df_base.empty:
         kg_tot, un_tot, bj_tot, out_tot, cx_total_real, _, _, _, _, _ = calcular_resumo_caixas(df_base, col_qtd, col_uni, col_prod)
         
-        c_i1, c_i2 = st.columns(2)
-        with c_i1:
-            dia_op = st.number_input("Dia da Operação (Dia da Semana / Ciclo)", min_value=1, max_value=31, value=6)
-        with c_i2:
-            peso_op = st.number_input("Peso Total da Carga (KG)", value=float(kg_tot), format="%.2f")
+        st.info(f"📊 **Carga Atual no Galpão:** **{fmt_br_float(kg_tot)} KG** correspondendo a **{fmt_br_int(cx_total_real)} Caixas Totais**.")
 
-        st.info(f"📊 **Dados da Planilha:** **{fmt_br_float(peso_op)} KG** correspondendo a **{fmt_br_int(cx_total_real)} Caixas Totais**.")
+        st.write("---")
+        st.subheader("👥 Controle de Faltas e Dimensionamento do Turno")
+        qtd_separadores = st.slider("Selecione a quantidade de separadores PRESENTES no turno hoje:", min_value=1, max_value=50, value=41)
 
-        if st.button("🚀 Executar Previsão de IA no Render", type="primary"):
-            prod = 120.0 # Valor padrão de segurança
-            try:
-                res = requests.post(f"{API_IA_URL}/previsao_produtividade", json={"proximo_dia": int(dia_op), "proximo_peso_kg": float(peso_op)}, timeout=5)
-                if res.status_code == 200:
-                    val_api = res.json().get("produtividade_prevista", 120.0)
-                    if float(val_api) > 0:
-                        prod = float(val_api)
-            except Exception:
-                prod = 120.0
+        # Média real do galpão: cada separador produz ~13.54 caixas/hora
+        CADENCIA_POR_SEPARADOR = 13.5365
+        produtividade_equipe_cxh = qtd_separadores * CADENCIA_POR_SEPARADOR
 
-            tempo_horas = cx_total_real / prod if prod > 0 else 0
-            horas_exatas = int(tempo_horas)
-            minutos_exatos = int((tempo_horas - horas_exatas) * 60)
+        tempo_horas_real = cx_total_real / produtividade_equipe_cxh if produtividade_equipe_cxh > 0 else 0
+        horas_exatas = int(tempo_horas_real)
+        minutos_exatos = int((tempo_horas_real - horas_exatas) * 60)
 
-            st.markdown("---")
-            st.subheader("🎯 Resultado do Planejamento Operacional")
-            
-            m1, m2, m3 = st.columns(3)
-            m1.markdown(f'<div class="card-laranja"><div class="card-titulo">Produtividade Estimada</div><div class="card-valor">{prod:.1f} cx/h</div></div>', unsafe_allow_html=True)
-            m2.markdown(f'<div class="card-verde"><div class="card-titulo">Volume Total a Separar</div><div class="card-valor">{fmt_br_int(cx_total_real)} caixas</div></div>', unsafe_allow_html=True)
-            m3.markdown(f'<div class="card-laranja"><div class="card-titulo">Tempo Total de Operação</div><div class="card-valor">{horas_exatas}h {minutos_exatos}min</div></div>', unsafe_allow_html=True)
+        st.markdown("---")
+        st.subheader("🎯 Planejamento do Turno de Separação")
+        
+        m1, m2, m3 = st.columns(3)
+        m1.markdown(f'<div class="card-laranja"><div class="card-titulo">Produtividade da Equipe</div><div class="card-valor">{produtividade_equipe_cxh:.1f} cx/h</div></div>', unsafe_allow_html=True)
+        m2.markdown(f'<div class="card-verde"><div class="card-titulo">Volume Total de Caixas</div><div class="card-valor">{fmt_br_int(cx_total_real)} caixas</div></div>', unsafe_allow_html=True)
+        m3.markdown(f'<div class="card-laranja"><div class="card-titulo">Tempo Estimado do Turno</div><div class="card-valor">{horas_exatas}h {minutos_exatos}min</div></div>', unsafe_allow_html=True)
 
-            st.write("---")
-            st.subheader("👥 Simulação de Dimensionamento da Equipe de Galpão")
-            qtd_separadores = st.slider("Selecione a quantidade de separadores no turno:", min_value=1, max_value=10, value=3)
-            
-            tempo_por_pessoa = tempo_horas / qtd_separadores
-            h_p = int(tempo_por_pessoa)
-            m_p = int((tempo_por_pessoa - h_p) * 60)
+        if qtd_separadores == 41:
+            st.success(f"Com o quadro completo de **41 separadores**, a equipe entregará toda a carga ({fmt_br_int(cx_total_real)} caixas) em exatamente **{horas_exatas}h {minutos_exatos}min**!")
+        else:
+            faltas = 41 - qtd_separadores
+            if faltas > 0:
+                st.warning(f"⚠️ Com **{faltas} falta(s)** registrada(s) ({qtd_separadores} presentes), o tempo total de separação subirá para **{horas_exatas}h {minutos_exatos}min**.")
+            else:
+                st.success(f"Com equipe reforçada ({qtd_separadores} pessoas), a carga será concluída em **{horas_exatas}h {minutos_exatos}min**!")
 
-            st.success(f"Com **{qtd_separadores} separadores** no turno, a carga inteira ({fmt_br_int(cx_total_real)} caixas) será concluída em **{h_p} hora(s) e {m_p} minuto(s)**!")
     else:
-        st.warning("💡 Por favor, primeiro suba a planilha na aba '📋 Separação do Dia' para carregar o peso real automaticamente.")
+        st.warning("💡 Por favor, primeiro suba a planilha na aba '📋 Separação do Dia' para carregar os volumes da carga.")
 
 # -------------------------------------------------------------------
 # 4. ENDEREÇOS DAS ESCOLAS
