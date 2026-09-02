@@ -6,7 +6,6 @@ from supabase import create_client, Client
 
 st.set_page_config(page_title="Módulo Tropical - Sistema de Expedição", layout="wide", page_icon="🌴")
 
-# CSS Personalizado: Centralização absoluta e alinhamento do texto
 st.markdown("""
 <style>
     .card-laranja {
@@ -51,7 +50,7 @@ st.markdown("""
     }
     .card-valor {
         color: #ffffff;
-        font-size: 16px;
+        font-size: 15px;
         font-weight: 800;
         text-align: center;
         width: 100%;
@@ -130,18 +129,31 @@ def exibir_metricas_detalhadas(df, col_qtd, col_uni, col_rota, col_empresa, col_
     else:
         bj_pvc, bj_comum = 0, bj_total
 
+    # Caixas Peso (20kg), Unidades (180un) e Outros (20vol)
     cx_kg = math.ceil(kg_total / 20.0) if kg_total > 0 else 0
     cx_un = math.ceil(un_total / 180.0) if un_total > 0 else 0
-    cx_ovo_pvc = math.ceil(bj_pvc / 10.0) if bj_pvc > 0 else 0
-    cx_ovo_comum = math.ceil(bj_comum / 12.0) if bj_comum > 0 else 0
     cx_outros = math.ceil(outros_total / 20.0) if outros_total > 0 else 0
-    cx_total_geral = cx_kg + cx_un + cx_ovo_pvc + cx_ovo_comum + cx_outros
+
+    # Lógica de Ovos em Caixas Fechadas + Avulsos
+    cx_pvc_fechadas = int(bj_pvc // 10)
+    avulso_pvc = int(bj_pvc % 10)
+
+    cx_comum_fechadas = int(bj_comum // 12)
+    avulso_comum = int(bj_comum % 12)
+
+    # Caixas totais para ovos (considerando volumes físicos ocupados)
+    cx_ovo_total = math.ceil(bj_pvc / 10.0) + math.ceil(bj_comum / 12.0)
+    cx_total_geral = cx_kg + cx_un + cx_outros + cx_ovo_total
+
+    # Formatadores de texto para a caixa
+    txt_pvc = f"{cx_pvc_fechadas} cx" + (f" + {avulso_pvc} bdj" if avulso_pvc > 0 else "")
+    txt_comum = f"{cx_comum_fechadas} cx" + (f" + {avulso_comum} bdj" if avulso_comum > 0 else "")
 
     k1, k2, k3, k4, k5, k6 = st.columns(6)
     k1.markdown(f'<div class="card-verde"><div class="card-titulo">CX Peso</div><div class="card-valor">{fmt_br_int(cx_kg)} cx</div></div>', unsafe_allow_html=True)
     k2.markdown(f'<div class="card-verde"><div class="card-titulo">CX Und</div><div class="card-valor">{fmt_br_int(cx_un)} cx</div></div>', unsafe_allow_html=True)
-    k3.markdown(f'<div class="card-verde"><div class="card-titulo">Ovo PVC</div><div class="card-valor">{fmt_br_int(cx_ovo_pvc)} cx<br><span style="font-size:12px; font-weight:normal;">({fmt_br_int(bj_pvc)} bj)</span></div></div>', unsafe_allow_html=True)
-    k4.markdown(f'<div class="card-verde"><div class="card-titulo">Ovo Comum</div><div class="card-valor">{fmt_br_int(cx_ovo_comum)} cx<br><span style="font-size:12px; font-weight:normal;">({fmt_br_int(bj_comum)} bj)</span></div></div>', unsafe_allow_html=True)
+    k3.markdown(f'<div class="card-verde"><div class="card-titulo">Ovo PVC</div><div class="card-valor">{txt_pvc}<br><span style="font-size:11px; font-weight:normal;">({fmt_br_int(bj_pvc)} bdj)</span></div></div>', unsafe_allow_html=True)
+    k4.markdown(f'<div class="card-verde"><div class="card-titulo">Ovo Comum</div><div class="card-valor">{txt_comum}<br><span style="font-size:11px; font-weight:normal;">({fmt_br_int(bj_comum)} bdj)</span></div></div>', unsafe_allow_html=True)
     k5.markdown(f'<div class="card-verde"><div class="card-titulo">CX Outros</div><div class="card-valor">{fmt_br_int(cx_outros)} cx</div></div>', unsafe_allow_html=True)
     k6.markdown(f'<div class="card-verde"><div class="card-titulo">Total de Caixas</div><div class="card-valor">{fmt_br_int(cx_total_geral)} cx</div></div>', unsafe_allow_html=True)
 
