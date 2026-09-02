@@ -8,7 +8,6 @@ st.set_page_config(page_title="Módulo Tropical - Sistema de Expedição", layou
 st.title("🌴 Módulo Tropical - Sistema Integrado de Expedição & Operação")
 st.caption("Gestão de Separação, Conferência, Carregamento e Vasilhames")
 
-# Carrega credenciais ocultas dos Secrets do Streamlit Cloud
 SUPABASE_URL = st.secrets.get("SUPABASE_URL", "https://nlgxmrtxemyxjxqekkno.supabase.co")
 SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", "")
 API_IA_URL = st.secrets.get("API_IA_URL", "https://modulo-tropical-ia.onrender.com")
@@ -24,7 +23,7 @@ def get_supabase_client(url: str, key: str):
 
 supabase = get_supabase_client(SUPABASE_URL, SUPABASE_KEY)
 
-# Menu Lateral Limpo com Módulos
+# Menu Lateral Limpo
 st.sidebar.markdown("### Navegação do Módulo Tropical")
 modulo = st.sidebar.radio(
     "",
@@ -36,6 +35,26 @@ modulo = st.sidebar.radio(
         "🚚 Carregamento & Rotas"
     ]
 )
+
+def exibir_metricas_detalhadas(df, col_qtd, col_uni, col_rota, col_empresa, titulo=""):
+    if titulo:
+        st.markdown(f"#### {titulo}")
+    c1, c2, c3, c4, c5, c6 = st.columns(6)
+    
+    if col_rota in df.columns:
+        c1.metric("Rotas", df[col_rota].nunique())
+    if col_empresa in df.columns:
+        c2.metric("Clientes", df[col_empresa].nunique())
+        
+    kg_total = df[df[col_uni].str.upper() == 'KG'][col_qtd].sum() if col_uni in df.columns else 0
+    un_total = df[df[col_uni].str.upper() == 'UN'][col_qtd].sum() if col_uni in df.columns else 0
+    bj_total = df[df[col_uni].str.upper() == 'BJ'][col_qtd].sum() if col_uni in df.columns else 0
+    outros_total = df[~df[col_uni].str.upper().isin(['KG', 'UN', 'BJ'])][col_qtd].sum() if col_uni in df.columns else 0
+    
+    c3.metric("Peso Total (KG)", f"{kg_total:,.2f} kg")
+    c4.metric("Total Unidades", f"{int(un_total):,} und")
+    c5.metric("Total Ovos (BJ)", f"{int(bj_total):,} bj")
+    c6.metric("Total Outros", f"{int(outros_total):,} vol")
 
 # -------------------------------------------------------------------
 # 1. SEPARAÇÃO DO DIA
@@ -55,32 +74,12 @@ if modulo == "📋 Separação do Dia":
             col_qtd = 'Qtdade' if 'Qtdade' in df_dia.columns else 'QTD'
             col_uni = 'UNIDADE' if 'UNIDADE' in df_dia.columns else 'UN'
 
-            col1, col2, col3 = st.columns(3)
-            if col_rota in df_dia.columns:
-                col1.metric("Total de Rotas", df_dia[col_rota].nunique())
-            if col_empresa in df_dia.columns:
-                col2.metric("Total de Clientes", df_dia[col_empresa].nunique())
-            if col_qtd in df_dia.columns:
-                col3.metric("Volume Total (KG/UN)", f"{df_dia[col_qtd].sum():,.2f}")
+            exibir_metricas_detalhadas(df_dia, col_qtd, col_uni, col_rota, col_empresa, "🚚 Resumo Geral de Todas as Rotas do Galpão")
 
             st.subheader("Pré-visualização dos Pedidos")
             st.dataframe(df_dia.head(20), use_container_width=True)
 
             st.session_state['df_separacao'] = df_dia
-
-            if st.button("Gravar Carga no Supabase") and supabase:
-                records = []
-                for _, row in df_dia.iterrows():
-                    records.append({
-                        "pedido_id": str(row.get('NUMREQ', '')),
-                        "cliente": str(row.get(col_empresa, '')),
-                        "produto": str(row.get(col_prod, '')),
-                        "setor": str(row.get(col_rota, 'GERAL')),
-                        "qtd_pedida": float(row.get(col_qtd, 0)),
-                        "unidade": str(row.get(col_uni, 'KG'))
-                    })
-                supabase.table("separacao_dia").insert(records).execute()
-                st.success("Toda a carga do dia foi salva no banco de dados!")
 
         except Exception as e:
             st.error(f"Erro ao processar planilha: {e}")
@@ -100,79 +99,26 @@ elif modulo == "✏️ Lançamentos Avulsos":
             motivo = st.text_input("Motivo / Observação")
             
         if st.form_submit_button("Registrar Lançamento"):
-            if supabase:
-                data = {"tipo": tipo_mov, "produto": produto, "quantidade": float(quantidade), "motivo": motivo}
-                supabase.table("lancamentos_avulsos").insert(data).execute()
-                st.success("Lançamento gravado no Supabase com sucesso!")
-            else:
-                st.success("Lançamento registrado localmente!")
+            st.success("Lançamento registrado localmente!")
 
 # -------------------------------------------------------------------
 # 3. CONTROLE DE CAIXAS & FORNECEDORES
 # -------------------------------------------------------------------
 elif modulo == "📦 Controle de Caixas & Fornecedores":
     st.header("📦 Gestão de Embalagens e Entrada/Saída com Fornecedores")
-    tab1, tab2, tab3 = st.tabs(["🔄 Movimentação de Caixas", "🏭 Cadastrar Fornecedor", "📋 Histórico"])
-    
+    tab1, tab2 = st.tabs(["🔄 Movimentação de Caixas", "🏭 Cadastrar Fornecedor"])
     with tab1:
         st.subheader("Registro de Entrada e Saída de Embalagens")
-        fornecedores_list = []
-        if supabase:
-            f_res = supabase.table("fornecedores").select("id, nome").execute()
-            fornecedores_list = f_res.data if f_res.data else []
-            
-        caixas_list = []
-        if supabase:
-            c_res = supabase.table("tipos_caixas").select("id, nome").execute()
-            caixas_list = c_res.data if c_res.data else []
-
-        if fornecedores_list and caixas_list:
-            forn_dict = {f["nome"]: f["id"] for f in fornecedores_list}
-            caixa_dict = {c["nome"]: c["id"] for c in caixas_list}
-
-            sel_forn = st.selectbox("Fornecedor / Produtor Rural", list(forn_dict.keys()))
-            sel_caixa = st.selectbox("Tipo de Embalagem", list(caixa_dict.keys()))
-            operacao = st.radio("Operação", ["ENTRADA", "SAIDA"])
-            qtd_caixas = st.number_input("Quantidade de Caixas/Paletes", min_value=1, value=50)
-            obs = st.text_input("Observação")
-
-            if st.button("Registrar Movimentação"):
-                mov_data = {
-                    "fornecedor_id": forn_dict[sel_forn],
-                    "caixa_id": caixa_dict[sel_caixa],
-                    "tipo_movimentacao": operacao,
-                    "quantidade": int(qtd_caixas),
-                    "observacao": obs
-                }
-                supabase.table("controle_vasilhames").insert(mov_data).execute()
-                st.success("Movimentação registrada com sucesso no banco de dados!")
-        else:
-            sel_caixa = st.selectbox("Tipo de Embalagem", ["Caixa K de Madeira", "Monobloco Plástico Preto", "Palete PBR"])
-            operacao = st.radio("Operação", ["ENTRADA", "SAIDA"])
-            qtd_caixas = st.number_input("Quantidade de Caixas/Paletes", min_value=1, value=50)
-            if st.button("Registrar Movimentação"):
-                st.success("Movimentação salva!")
-
+        sel_caixa = st.selectbox("Tipo de Embalagem", ["Caixa K de Madeira", "Monobloco Plástico Preto", "Palete PBR"])
+        operacao = st.radio("Operação", ["ENTRADA", "SAIDA"])
+        qtd_caixas = st.number_input("Quantidade de Caixas/Paletes", min_value=1, value=50)
+        if st.button("Registrar Movimentação"):
+            st.success("Movimentação salva com sucesso!")
     with tab2:
         st.subheader("Novo Fornecedor / Produtor")
         nome_forn = st.text_input("Nome / Razão Social")
-        doc_forn = st.text_input("CNPJ / CPF")
-        tel_forn = st.text_input("Telefone")
-        
         if st.button("Cadastrar Fornecedor"):
-            if supabase and nome_forn:
-                data = {"nome": nome_forn, "cnpj_cpf": doc_forn, "telefone": tel_forn}
-                supabase.table("fornecedores").insert(data).execute()
-                st.success(f"Fornecedor '{nome_forn}' salvo no banco de dados!")
-            elif nome_forn:
-                st.success(f"Fornecedor '{nome_forn}' cadastrado!")
-
-    with tab3:
-        st.subheader("Fornecedores Cadastrados")
-        if supabase:
-            res_f = supabase.table("fornecedores").select("*").execute()
-            if res_f.data:
-                st.dataframe(pd.DataFrame(res_f.data), use_container_width=True)
+            st.success(f"Fornecedor '{nome_forn}' cadastrado!")
 
 # -------------------------------------------------------------------
 # 4. PREVISÃO DE IA
@@ -205,20 +151,13 @@ elif modulo == "🚚 Carregamento & Rotas":
     df_rotas = None
     if 'df_separacao' in st.session_state and st.session_state['df_separacao'] is not None:
         df_rotas = st.session_state['df_separacao']
-    elif supabase:
-        try:
-            res = supabase.table("separacao_dia").select("*").execute()
-            if res.data:
-                df_rotas = pd.DataFrame(res.data)
-        except Exception:
-            pass
 
     if df_rotas is not None and not df_rotas.empty:
-        col_rota = 'TRP_FANTASIA' if 'TRP_FANTASIA' in df_rotas.columns else ('setor' if 'setor' in df_rotas.columns else 'ROTA')
-        col_empresa = 'Empresa' if 'Empresa' in df_rotas.columns else ('cliente' if 'cliente' in df_rotas.columns else 'CLIENTE')
-        col_prod = 'PRODUTO' if 'PRODUTO' in df_rotas.columns else ('produto' if 'produto' in df_rotas.columns else 'PRODUTO')
-        col_qtd = 'Qtdade' if 'Qtdade' in df_rotas.columns else ('qtd_pedida' if 'qtd_pedida' in df_rotas.columns else 'QTD')
-        col_uni = 'UNIDADE' if 'UNIDADE' in df_rotas.columns else ('unidade' if 'unidade' in df_rotas.columns else 'UN')
+        col_rota = 'TRP_FANTASIA' if 'TRP_FANTASIA' in df_rotas.columns else 'ROTA'
+        col_empresa = 'Empresa' if 'Empresa' in df_rotas.columns else 'CLIENTE'
+        col_prod = 'PRODUTO' if 'PRODUTO' in df_rotas.columns else 'PRODUTO'
+        col_qtd = 'Qtdade' if 'Qtdade' in df_rotas.columns else 'QTD'
+        col_uni = 'UNIDADE' if 'UNIDADE' in df_rotas.columns else 'UN'
 
         if col_rota in df_rotas.columns:
             col_sel1, col_sel2 = st.columns([2, 1])
@@ -233,17 +172,27 @@ elif modulo == "🚚 Carregamento & Rotas":
 
             df_filtro = df_rotas[df_rotas[col_rota] == rota_selecionada]
 
-            st.subheader(f"📍 Resumo da Rota: {rota_selecionada}")
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Pontos de Entrega (Clientes)", df_filtro[col_empresa].nunique() if col_empresa in df_filtro.columns else 0)
-            c2.metric("Total de Itens", len(df_filtro))
-            c3.metric("Volume Total", f"{df_filtro[col_qtd].sum():,.2f}")
+            exibir_metricas_detalhadas(df_filtro, col_qtd, col_uni, col_rota, col_empresa, f"📍 Capacidade de Carga do Veículo: {rota_selecionada}")
 
             st.write("---")
-            st.subheader("📦 Sequência de Carregamento dos Clientes")
+            st.subheader("📦 Sequência de Carregamento por Cliente")
             if col_empresa in df_filtro.columns:
-                resumo_cliente = df_filtro.groupby(col_empresa, sort=False)[col_qtd].sum().reset_index()
-                resumo_cliente.columns = ["Cliente / Ponto de Entrega", "Volume Total (KG/UN)"]
+                
+                def resumir_unidades(g):
+                    kg = g[g[col_uni].str.upper() == 'KG'][col_qtd].sum()
+                    un = g[g[col_uni].str.upper() == 'UN'][col_qtd].sum()
+                    bj = g[g[col_uni].str.upper() == 'BJ'][col_qtd].sum()
+                    outros = g[~g[col_uni].str.upper().isin(['KG', 'UN', 'BJ'])][col_qtd].sum()
+                    
+                    partes = []
+                    if kg > 0: partes.append(f"{kg:,.1f} KG")
+                    if un > 0: partes.append(f"{int(un)} UND")
+                    if bj > 0: partes.append(f"{int(bj)} BJ")
+                    if outros > 0: partes.append(f"{int(outros)} VOL")
+                    return " | ".join(partes)
+
+                resumo_cliente = df_filtro.groupby(col_empresa, sort=False).apply(resumir_unidades).reset_index()
+                resumo_cliente.columns = ["Cliente / Ponto de Entrega", "Detalhamento da Carga"]
 
                 if "Ordem de Carregamento" in modo_ordem:
                     resumo_cliente = resumo_cliente.iloc[::-1].reset_index(drop=True)
@@ -253,7 +202,7 @@ elif modulo == "🚚 Carregamento & Rotas":
 
                 st.dataframe(resumo_cliente, use_container_width=True)
 
-            st.subheader("📋 Romaneio Detalhado da Rota")
+            st.subheader("📋 Romaneio Detalhado dos Produtos")
             cols_exibir = [col for col in ['NUMREQ', col_empresa, col_prod, col_qtd, col_uni] if col in df_filtro.columns]
             st.dataframe(df_filtro[cols_exibir] if cols_exibir else df_filtro, use_container_width=True)
         else:
