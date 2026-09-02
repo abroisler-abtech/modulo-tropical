@@ -5,30 +5,39 @@ from supabase import create_client, Client
 
 st.set_page_config(page_title="Módulo Tropical - Sistema de Expedição", layout="wide", page_icon="🌴")
 
-# CSS Personalizado para os Cards em Laranja
+# CSS Personalizado: Fundo Laranja Escuro Integral e Texto Centralizado
 st.markdown("""
 <style>
     .card-laranja {
-        background-color: #2b1d0c;
-        border: 2px solid #f39c12;
+        background-color: #d35400;
+        border: 2px solid #e67e22;
         border-radius: 10px;
-        padding: 12px;
+        padding: 12px 5px;
         text-align: center;
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
         margin-bottom: 10px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        min-height: 90px;
     }
     .card-titulo {
-        color: #f39c12;
+        color: #ffffff;
         font-size: 13px;
         font-weight: bold;
         text-transform: uppercase;
-        margin-bottom: 5px;
+        margin-bottom: 6px;
+        text-align: center;
+        width: 100%;
     }
     .card-valor {
         color: #ffffff;
-        font-size: 20px;
+        font-size: 19px;
         font-weight: bold;
         white-space: nowrap;
+        text-align: center;
+        width: 100%;
     }
 </style>
 """, unsafe_allow_html=True)
