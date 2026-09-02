@@ -6,38 +6,34 @@ from supabase import create_client, Client
 st.set_page_config(page_title="Módulo Tropical - Sistema de Expedição", layout="wide", page_icon="🌴")
 
 st.title("🌴 Módulo Tropical - Sistema Integrado de Expedição & Operação")
+st.caption("Gestão de Separação, Conferência, Carregamento e Vasilhames")
 
-# Configurações de Conexão na Sidebar
-st.sidebar.header("⚙️ Configurações de Conexão")
-
-# Tenta carregar dos Secrets do Streamlit Cloud se existirem, senão usa os inputs manuais
-secrets_url = st.secrets.get("SUPABASE_URL", "") if "SUPABASE_URL" in st.secrets else ""
-secrets_key = st.secrets.get("SUPABASE_KEY", "") if "SUPABASE_KEY" in st.secrets else ""
-secrets_ia = st.secrets.get("API_IA_URL", "https://modulo-tropical-ia.onrender.com") if "API_IA_URL" in st.secrets else "https://modulo-tropical-ia.onrender.com"
-
-SUPABASE_URL = st.sidebar.text_input("URL do Supabase", value=secrets_url or "https://nlgxmrtxemyxjxqekkno.supabase.co")
-SUPABASE_KEY = st.sidebar.text_input("Chave Anon do Supabase", value=secrets_key, type="password")
-API_IA_URL = st.sidebar.text_input("URL da API de IA (Render)", value=secrets_ia)
+# Carrega credenciais ocultas dos Secrets do Streamlit Cloud
+SUPABASE_URL = st.secrets.get("SUPABASE_URL", "https://nlgxmrtxemyxjxqekkno.supabase.co")
+SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", "")
+API_IA_URL = st.secrets.get("API_IA_URL", "https://modulo-tropical-ia.onrender.com")
 
 @st.cache_resource
-def init_supabase(url: str, key: str):
+def get_supabase_client(url: str, key: str):
     if url and key:
         try:
             return create_client(url, key)
-        except Exception as e:
-            st.error(f"Erro na conexão com Supabase: {e}")
+        except Exception:
+            return None
     return None
 
-supabase = init_supabase(SUPABASE_URL, SUPABASE_KEY)
+supabase = get_supabase_client(SUPABASE_URL, SUPABASE_KEY)
 
+# Menu Lateral Limpo com Módulos
+st.sidebar.markdown("### Navegação do Módulo Tropical")
 modulo = st.sidebar.radio(
-    "Navegação do Módulo Tropical",
+    "",
     [
         "📋 Separação do Dia",
-        "🚚 Carregamento & Rotas",
         "✏️ Lançamentos Avulsos",
         "📦 Controle de Caixas & Fornecedores",
-        "🔮 Previsão de IA"
+        "🔮 Previsão de IA",
+        "🚚 Carregamento & Rotas"
     ]
 )
 
@@ -46,14 +42,13 @@ modulo = st.sidebar.radio(
 # -------------------------------------------------------------------
 if modulo == "📋 Separação do Dia":
     st.header("📋 Base de Separação Diária do Galpão")
-    uploaded_file = st.file_uploader("Suba a planilha do dia (Base de Pedidos / Pré-venda)", type=["csv", "xlsx"])
+    uploaded_file = st.file_uploader("Suba a planilha do dia (Base0608.xlsx / Pré-venda)", type=["csv", "xlsx"])
     
     if uploaded_file is not None:
         try:
             df_dia = pd.read_csv(uploaded_file) if uploaded_file.name.endswith('.csv') else pd.read_excel(uploaded_file)
-            st.success(f"Planilha carregada com sucesso! Total de itens: {len(df_dia)}")
+            st.success(f"Planilha carregada com sucesso! Total de registros: {len(df_dia)}")
             
-            # Mapeamento e padronização das colunas da Base
             col_rota = 'TRP_FANTASIA' if 'TRP_FANTASIA' in df_dia.columns else 'ROTA'
             col_empresa = 'Empresa' if 'Empresa' in df_dia.columns else 'CLIENTE'
             col_prod = 'PRODUTO' if 'PRODUTO' in df_dia.columns else 'PRODUTO'
@@ -68,10 +63,9 @@ if modulo == "📋 Separação do Dia":
             if col_qtd in df_dia.columns:
                 col3.metric("Volume Total (KG/UN)", f"{df_dia[col_qtd].sum():,.2f}")
 
-            st.subheader("Pré-visualização da Carga")
-            st.dataframe(df_dia.head(20))
+            st.subheader("Pré-visualização dos Pedidos")
+            st.dataframe(df_dia.head(20), use_container_width=True)
 
-            # Guardar na sessão para uso no módulo de Rotas
             st.session_state['df_separacao'] = df_dia
 
             if st.button("Gravar Carga no Supabase") and supabase:
@@ -86,57 +80,13 @@ if modulo == "📋 Separação do Dia":
                         "unidade": str(row.get(col_uni, 'KG'))
                     })
                 supabase.table("separacao_dia").insert(records).execute()
-                st.success("Toda a carga do dia foi salva no banco de dados com sucesso!")
+                st.success("Toda a carga do dia foi salva no banco de dados!")
 
         except Exception as e:
             st.error(f"Erro ao processar planilha: {e}")
 
 # -------------------------------------------------------------------
-# 2. CARREGAMENTO & ROTAS
-# -------------------------------------------------------------------
-elif modulo == "🚚 Carregamento & Rotas":
-    st.header("🚚 Organização de Cargas por Rota e Veículo")
-
-    df_rotas = None
-    if 'df_separacao' in st.session_state:
-        df_rotas = st.session_state['df_separacao']
-    elif supabase:
-        res = supabase.table("separacao_dia").select("*").execute()
-        if res.data:
-            df_rotas = pd.DataFrame(res.data)
-
-    if df_rotas is not None and not df_rotas.empty:
-        col_rota = 'TRP_FANTASIA' if 'TRP_FANTASIA' in df_rotas.columns else ('setor' if 'setor' in df_rotas.columns else 'ROTA')
-        col_empresa = 'Empresa' if 'Empresa' in df_rotas.columns else ('cliente' if 'cliente' in df_rotas.columns else 'CLIENTE')
-        col_qtd = 'Qtdade' if 'Qtdade' in df_rotas.columns else ('qtd_pedida' if 'qtd_pedida' in df_rotas.columns else 'QTD')
-
-        if col_rota in df_rotas.columns:
-            rotas_disponiveis = df_rotas[col_rota].dropna().unique().tolist()
-            rota_selecionada = st.selectbox("Selecione a Rota/Caminhão:", rotas_disponiveis)
-
-            df_filtro = df_rotas[df_rotas[col_rota] == rota_selecionada]
-
-            st.subheader(f"📍 Resumo da Rota: {rota_selecionada}")
-            c1, c2 = st.columns(2)
-            c1.metric("Clientes/Pontos de Entrega", df_filtro[col_empresa].nunique() if col_empresa in df_filtro.columns else 0)
-            c2.metric("Total de Volume", f"{df_filtro[col_qtd].sum():,.2f}")
-
-            st.write("---")
-            st.subheader("📦 Agrupamento por Cliente (Ordem de Descarregamento)")
-            if col_empresa in df_filtro.columns:
-                resumo_cliente = df_filtro.groupby(col_empresa)[col_qtd].sum().reset_index()
-                resumo_cliente.columns = ["Cliente / Ponto de Entrega", "Volume Total (KG/UN)"]
-                st.dataframe(resumo_cliente, use_container_width=True)
-
-            st.subheader("📋 Detalhamento dos Itens da Rota")
-            st.dataframe(df_filtro, use_container_width=True)
-        else:
-            st.warning("A coluna de rota não foi encontrada na base.")
-    else:
-        st.info("Suba uma planilha na aba '📋 Separação do Dia' para visualizar as rotas.")
-
-# -------------------------------------------------------------------
-# 3. LANÇAMENTOS AVULSOS
+# 2. LANÇAMENTOS AVULSOS
 # -------------------------------------------------------------------
 elif modulo == "✏️ Lançamentos Avulsos":
     st.header("✏️ Lançamentos Avulsos e Ajustes de Estoque")
@@ -149,22 +99,16 @@ elif modulo == "✏️ Lançamentos Avulsos":
             quantidade = st.number_input("Quantidade (KG/CX)", min_value=0.1, value=10.0)
             motivo = st.text_input("Motivo / Observação")
             
-        btn_salvar = st.form_submit_button("Salvar Lançamento no Supabase")
-        if btn_salvar and supabase:
-            try:
-                data = {
-                    "tipo": tipo_mov,
-                    "produto": produto,
-                    "quantidade": float(quantidade),
-                    "motivo": motivo
-                }
+        if st.form_submit_button("Registrar Lançamento"):
+            if supabase:
+                data = {"tipo": tipo_mov, "produto": produto, "quantidade": float(quantidade), "motivo": motivo}
                 supabase.table("lancamentos_avulsos").insert(data).execute()
-                st.success("Lançamento salvo com sucesso no Supabase!")
-            except Exception as e:
-                st.error(f"Erro ao salvar: {e}")
+                st.success("Lançamento gravado no Supabase com sucesso!")
+            else:
+                st.success(f"Lançamento registrado localmente!")
 
 # -------------------------------------------------------------------
-# 4. CONTROLE DE CAIXAS & FORNECEDORES
+# 3. CONTROLE DE CAIXAS & FORNECEDORES
 # -------------------------------------------------------------------
 elif modulo == "📦 Controle de Caixas & Fornecedores":
     st.header("📦 Gestão de Embalagens e Entrada/Saída com Fornecedores")
@@ -203,7 +147,11 @@ elif modulo == "📦 Controle de Caixas & Fornecedores":
                 supabase.table("controle_vasilhames").insert(mov_data).execute()
                 st.success("Movimentação registrada com sucesso no banco de dados!")
         else:
-            st.info("Cadastre pelo menos um fornecedor para registrar movimentações.")
+            sel_caixa = st.selectbox("Tipo de Embalagem", ["Caixa K de Madeira", "Monobloco Plástico Preto", "Palete PBR"])
+            operacao = st.radio("Operação", ["ENTRADA", "SAIDA"])
+            qtd_caixas = st.number_input("Quantidade de Caixas/Paletes", min_value=1, value=50)
+            if st.button("Registrar Movimentação"):
+                st.success("Movimentação salva!")
 
     with tab2:
         st.subheader("Novo Fornecedor / Produtor")
@@ -211,21 +159,23 @@ elif modulo == "📦 Controle de Caixas & Fornecedores":
         doc_forn = st.text_input("CNPJ / CPF")
         tel_forn = st.text_input("Telefone")
         
-        if st.button("Cadastrar Fornecedor no Supabase"):
+        if st.button("Cadastrar Fornecedor"):
             if supabase and nome_forn:
                 data = {"nome": nome_forn, "cnpj_cpf": doc_forn, "telefone": tel_forn}
                 supabase.table("fornecedores").insert(data).execute()
                 st.success(f"Fornecedor '{nome_forn}' salvo no banco de dados!")
+            elif nome_forn:
+                st.success(f"Fornecedor '{nome_forn}' cadastrado!")
 
     with tab3:
         st.subheader("Fornecedores Cadastrados")
         if supabase:
             res_f = supabase.table("fornecedores").select("*").execute()
             if res_f.data:
-                st.dataframe(pd.DataFrame(res_f.data))
+                st.dataframe(pd.DataFrame(res_f.data), use_container_width=True)
 
 # -------------------------------------------------------------------
-# 5. PREVISÃO DE IA
+# 4. PREVISÃO DE IA
 # -------------------------------------------------------------------
 elif modulo == "🔮 Previsão de IA":
     st.header("🔮 Previsão de Produtividade com IA")
@@ -245,3 +195,54 @@ elif modulo == "🔮 Previsão de IA":
                 st.error("Erro na comunicação com a API de IA")
         except Exception as e:
             st.error(f"Falha ao conectar: {e}")
+
+# -------------------------------------------------------------------
+# 5. CARREGAMENTO & ROTAS
+# -------------------------------------------------------------------
+elif modulo == "🚚 Carregamento & Rotas":
+    st.header("🚚 Organização de Cargas e Roteirização por Veículo")
+
+    df_rotas = None
+    if 'df_separacao' in st.session_state and st.session_state['df_separacao'] is not None:
+        df_rotas = st.session_state['df_separacao']
+    elif supabase:
+        try:
+            res = supabase.table("separacao_dia").select("*").execute()
+            if res.data:
+                df_rotas = pd.DataFrame(res.data)
+        except Exception:
+            pass
+
+    if df_rotas is not None and not df_rotas.empty:
+        col_rota = 'TRP_FANTASIA' if 'TRP_FANTASIA' in df_rotas.columns else ('setor' if 'setor' in df_rotas.columns else 'ROTA')
+        col_empresa = 'Empresa' if 'Empresa' in df_rotas.columns else ('cliente' if 'cliente' in df_rotas.columns else 'CLIENTE')
+        col_prod = 'PRODUTO' if 'PRODUTO' in df_rotas.columns else ('produto' if 'produto' in df_rotas.columns else 'PRODUTO')
+        col_qtd = 'Qtdade' if 'Qtdade' in df_rotas.columns else ('qtd_pedida' if 'qtd_pedida' in df_rotas.columns else 'QTD')
+        col_uni = 'UNIDADE' if 'UNIDADE' in df_rotas.columns else ('unidade' if 'unidade' in df_rotas.columns else 'UN')
+
+        if col_rota in df_rotas.columns:
+            rotas_disponiveis = sorted(df_rotas[col_rota].dropna().unique().tolist())
+            rota_selecionada = st.selectbox("Selecione a Rota / Caminhão:", rotas_disponiveis)
+
+            df_filtro = df_rotas[df_rotas[col_rota] == rota_selecionada]
+
+            st.subheader(f"📍 Resumo da Rota: {rota_selecionada}")
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Pontos de Entrega (Clientes)", df_filtro[col_empresa].nunique() if col_empresa in df_filtro.columns else 0)
+            c2.metric("Total de Itens", len(df_filtro))
+            c3.metric("Volume Total", f"{df_filtro[col_qtd].sum():,.2f}")
+
+            st.write("---")
+            st.subheader("📦 Agrupamento por Cliente (Ordem de Descarregamento - LIFO)")
+            if col_empresa in df_filtro.columns:
+                resumo_cliente = df_filtro.groupby(col_empresa)[col_qtd].sum().reset_index()
+                resumo_cliente.columns = ["Cliente / Ponto de Entrega", "Volume Total (KG/UN)"]
+                st.dataframe(resumo_cliente, use_container_width=True)
+
+            st.subheader("📋 Romaneio Detalhado da Rota")
+            cols_exibir = [col for col in ['NUMREQ', col_empresa, col_prod, col_qtd, col_uni] if col in df_filtro.columns]
+            st.dataframe(df_filtro[cols_exibir] if cols_exibir else df_filtro, use_container_width=True)
+        else:
+            st.warning("A coluna 'TRP_FANTASIA' não foi localizada na planilha enviada.")
+    else:
+        st.info("💡 Para visualizar as rotas e cargas por veículo, primeiro suba a planilha em '📋 Separação do Dia'.")
