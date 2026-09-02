@@ -5,6 +5,34 @@ from supabase import create_client, Client
 
 st.set_page_config(page_title="Módulo Tropical - Sistema de Expedição", layout="wide", page_icon="🌴")
 
+# CSS Personalizado para os Cards em Laranja
+st.markdown("""
+<style>
+    .card-laranja {
+        background-color: #2b1d0c;
+        border: 2px solid #f39c12;
+        border-radius: 10px;
+        padding: 12px;
+        text-align: center;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        margin-bottom: 10px;
+    }
+    .card-titulo {
+        color: #f39c12;
+        font-size: 13px;
+        font-weight: bold;
+        text-transform: uppercase;
+        margin-bottom: 5px;
+    }
+    .card-valor {
+        color: #ffffff;
+        font-size: 20px;
+        font-weight: bold;
+        white-space: nowrap;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 st.title("🌴 Módulo Tropical - Sistema Integrado de Expedição & Operação")
 st.caption("Gestão de Separação, Conferência, Carregamento e Vasilhames")
 
@@ -39,22 +67,23 @@ modulo = st.sidebar.radio(
 def exibir_metricas_detalhadas(df, col_qtd, col_uni, col_rota, col_empresa, titulo=""):
     if titulo:
         st.markdown(f"#### {titulo}")
+        
     c1, c2, c3, c4, c5, c6 = st.columns(6)
     
-    if col_rota in df.columns:
-        c1.metric("Rotas", df[col_rota].nunique())
-    if col_empresa in df.columns:
-        c2.metric("Clientes", df[col_empresa].nunique())
+    num_rotas = df[col_rota].nunique() if col_rota in df.columns else 0
+    num_clientes = df[col_empresa].nunique() if col_empresa in df.columns else 0
         
     kg_total = df[df[col_uni].str.upper() == 'KG'][col_qtd].sum() if col_uni in df.columns else 0
     un_total = df[df[col_uni].str.upper() == 'UN'][col_qtd].sum() if col_uni in df.columns else 0
     bj_total = df[df[col_uni].str.upper() == 'BJ'][col_qtd].sum() if col_uni in df.columns else 0
     outros_total = df[~df[col_uni].str.upper().isin(['KG', 'UN', 'BJ'])][col_qtd].sum() if col_uni in df.columns else 0
     
-    c3.metric("Peso Total (KG)", f"{kg_total:,.2f} kg")
-    c4.metric("Total Unidades", f"{int(un_total):,} und")
-    c5.metric("Total Ovos (BJ)", f"{int(bj_total):,} bj")
-    c6.metric("Total Outros", f"{int(outros_total):,} vol")
+    c1.markdown(f'<div class="card-laranja"><div class="card-titulo">Rotas</div><div class="card-valor">{num_rotas}</div></div>', unsafe_allow_html=True)
+    c2.markdown(f'<div class="card-laranja"><div class="card-titulo">Clientes</div><div class="card-valor">{num_clientes}</div></div>', unsafe_allow_html=True)
+    c3.markdown(f'<div class="card-laranja"><div class="card-titulo">Peso Total (KG)</div><div class="card-valor">{kg_total:,.2f} kg</div></div>', unsafe_allow_html=True)
+    c4.markdown(f'<div class="card-laranja"><div class="card-titulo">Total Unidades</div><div class="card-valor">{int(un_total):,} und</div></div>', unsafe_allow_html=True)
+    c5.markdown(f'<div class="card-laranja"><div class="card-titulo">Total Ovos (BJ)</div><div class="card-valor">{int(bj_total):,} bj</div></div>', unsafe_allow_html=True)
+    c6.markdown(f'<div class="card-laranja"><div class="card-titulo">Total Outros</div><div class="card-valor">{int(outros_total):,} vol</div></div>', unsafe_allow_html=True)
 
 # -------------------------------------------------------------------
 # 1. SEPARAÇÃO DO DIA
@@ -76,6 +105,7 @@ if modulo == "📋 Separação do Dia":
 
             exibir_metricas_detalhadas(df_dia, col_qtd, col_uni, col_rota, col_empresa, "🚚 Resumo Geral de Todas as Rotas do Galpão")
 
+            st.write("---")
             st.subheader("Pré-visualização dos Pedidos")
             st.dataframe(df_dia.head(20), use_container_width=True)
 
@@ -205,7 +235,6 @@ elif modulo == "🚚 Carregamento & Rotas":
             st.write("---")
             st.subheader("📋 Romaneio de Produtos")
 
-            # Filtro por cliente individual
             clientes_da_rota = ["-- Todos os Clientes da Rota --"] + list(df_filtro[col_empresa].unique())
             cliente_selecionado = st.selectbox("Filtrar Romaneio por Cliente / Ponto de Entrega:", clientes_da_rota)
 
