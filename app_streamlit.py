@@ -202,9 +202,21 @@ elif modulo == "🚚 Carregamento & Rotas":
 
                 st.dataframe(resumo_cliente, use_container_width=True)
 
-            st.subheader("📋 Romaneio Detalhado dos Produtos")
-            cols_exibir = [col for col in ['NUMREQ', col_empresa, col_prod, col_qtd, col_uni] if col in df_filtro.columns]
-            st.dataframe(df_filtro[cols_exibir] if cols_exibir else df_filtro, use_container_width=True)
+            st.write("---")
+            st.subheader("📋 Romaneio de Produtos")
+
+            # Filtro por cliente individual
+            clientes_da_rota = ["-- Todos os Clientes da Rota --"] + list(df_filtro[col_empresa].unique())
+            cliente_selecionado = st.selectbox("Filtrar Romaneio por Cliente / Ponto de Entrega:", clientes_da_rota)
+
+            if cliente_selecionado != "-- Todos os Clientes da Rota --":
+                df_exibir_produtos = df_filtro[df_filtro[col_empresa] == cliente_selecionado]
+                st.info(f"Exibindo romaneio individual de: **{cliente_selecionado}**")
+            else:
+                df_exibir_produtos = df_filtro
+
+            cols_exibir = [col for col in ['NUMREQ', col_empresa, col_prod, col_qtd, col_uni] if col in df_exibir_produtos.columns]
+            st.dataframe(df_exibir_produtos[cols_exibir] if cols_exibir else df_exibir_produtos, use_container_width=True)
         else:
             st.warning("A coluna 'TRP_FANTASIA' não foi localizada na planilha enviada.")
     else:
