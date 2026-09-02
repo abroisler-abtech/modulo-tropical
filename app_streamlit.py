@@ -5,7 +5,7 @@ from supabase import create_client, Client
 
 st.set_page_config(page_title="Módulo Tropical - Sistema de Expedição", layout="wide", page_icon="🌴")
 
-# CSS Personalizado: Fundo Laranja Escuro Integral e Texto Centralizado
+# CSS Personalizado: Fundo Laranja Escuro e Texto Centralizado
 st.markdown("""
 <style>
     .card-laranja {
@@ -24,7 +24,7 @@ st.markdown("""
     }
     .card-titulo {
         color: #ffffff;
-        font-size: 13px;
+        font-size: 12px;
         font-weight: bold;
         text-transform: uppercase;
         margin-bottom: 6px;
@@ -33,7 +33,7 @@ st.markdown("""
     }
     .card-valor {
         color: #ffffff;
-        font-size: 19px;
+        font-size: 18px;
         font-weight: bold;
         white-space: nowrap;
         text-align: center;
@@ -73,14 +73,15 @@ modulo = st.sidebar.radio(
     ]
 )
 
-def exibir_metricas_detalhadas(df, col_qtd, col_uni, col_rota, col_empresa, titulo=""):
+def exibir_metricas_detalhadas(df, col_qtd, col_uni, col_rota, col_empresa, col_req, titulo=""):
     if titulo:
         st.markdown(f"#### {titulo}")
         
-    c1, c2, c3, c4, c5, c6 = st.columns(6)
+    c1, c2, c3, c4, c5, c6, c7 = st.columns(7)
     
     num_rotas = df[col_rota].nunique() if col_rota in df.columns else 0
     num_clientes = df[col_empresa].nunique() if col_empresa in df.columns else 0
+    num_pedidos = df[col_req].nunique() if col_req in df.columns else 0
         
     kg_total = df[df[col_uni].str.upper() == 'KG'][col_qtd].sum() if col_uni in df.columns else 0
     un_total = df[df[col_uni].str.upper() == 'UN'][col_qtd].sum() if col_uni in df.columns else 0
@@ -89,10 +90,11 @@ def exibir_metricas_detalhadas(df, col_qtd, col_uni, col_rota, col_empresa, titu
     
     c1.markdown(f'<div class="card-laranja"><div class="card-titulo">Rotas</div><div class="card-valor">{num_rotas}</div></div>', unsafe_allow_html=True)
     c2.markdown(f'<div class="card-laranja"><div class="card-titulo">Clientes</div><div class="card-valor">{num_clientes}</div></div>', unsafe_allow_html=True)
-    c3.markdown(f'<div class="card-laranja"><div class="card-titulo">Peso Total (KG)</div><div class="card-valor">{kg_total:,.2f} kg</div></div>', unsafe_allow_html=True)
-    c4.markdown(f'<div class="card-laranja"><div class="card-titulo">Total Unidades</div><div class="card-valor">{int(un_total):,} und</div></div>', unsafe_allow_html=True)
-    c5.markdown(f'<div class="card-laranja"><div class="card-titulo">Total Ovos (BJ)</div><div class="card-valor">{int(bj_total):,} bj</div></div>', unsafe_allow_html=True)
-    c6.markdown(f'<div class="card-laranja"><div class="card-titulo">Total Outros</div><div class="card-valor">{int(outros_total):,} vol</div></div>', unsafe_allow_html=True)
+    c3.markdown(f'<div class="card-laranja"><div class="card-titulo">Pedidos</div><div class="card-valor">{num_pedidos}</div></div>', unsafe_allow_html=True)
+    c4.markdown(f'<div class="card-laranja"><div class="card-titulo">Peso (KG)</div><div class="card-valor">{kg_total:,.1f} kg</div></div>', unsafe_allow_html=True)
+    c5.markdown(f'<div class="card-laranja"><div class="card-titulo">Unidades</div><div class="card-valor">{int(un_total):,} und</div></div>', unsafe_allow_html=True)
+    c6.markdown(f'<div class="card-laranja"><div class="card-titulo">Ovos (BJ)</div><div class="card-valor">{int(bj_total):,} bj</div></div>', unsafe_allow_html=True)
+    c7.markdown(f'<div class="card-laranja"><div class="card-titulo">Outros</div><div class="card-valor">{int(outros_total):,} vol</div></div>', unsafe_allow_html=True)
 
 # -------------------------------------------------------------------
 # 1. SEPARAÇÃO DO DIA
@@ -111,8 +113,9 @@ if modulo == "📋 Separação do Dia":
             col_prod = 'PRODUTO' if 'PRODUTO' in df_dia.columns else 'PRODUTO'
             col_qtd = 'Qtdade' if 'Qtdade' in df_dia.columns else 'QTD'
             col_uni = 'UNIDADE' if 'UNIDADE' in df_dia.columns else 'UN'
+            col_req = 'NUMREQ' if 'NUMREQ' in df_dia.columns else 'PEDIDO'
 
-            exibir_metricas_detalhadas(df_dia, col_qtd, col_uni, col_rota, col_empresa, "🚚 Resumo Geral de Todas as Rotas do Galpão")
+            exibir_metricas_detalhadas(df_dia, col_qtd, col_uni, col_rota, col_empresa, col_req, "🚚 Resumo Geral de Todas as Rotas do Galpão")
 
             st.write("---")
             st.subheader("Pré-visualização dos Pedidos")
@@ -197,6 +200,7 @@ elif modulo == "🚚 Carregamento & Rotas":
         col_prod = 'PRODUTO' if 'PRODUTO' in df_rotas.columns else 'PRODUTO'
         col_qtd = 'Qtdade' if 'Qtdade' in df_rotas.columns else 'QTD'
         col_uni = 'UNIDADE' if 'UNIDADE' in df_rotas.columns else 'UN'
+        col_req = 'NUMREQ' if 'NUMREQ' in df_rotas.columns else 'PEDIDO'
 
         if col_rota in df_rotas.columns:
             col_sel1, col_sel2 = st.columns([2, 1])
@@ -211,49 +215,52 @@ elif modulo == "🚚 Carregamento & Rotas":
 
             df_filtro = df_rotas[df_rotas[col_rota] == rota_selecionada]
 
-            exibir_metricas_detalhadas(df_filtro, col_qtd, col_uni, col_rota, col_empresa, f"📍 Capacidade de Carga do Veículo: {rota_selecionada}")
+            exibir_metricas_detalhadas(df_filtro, col_qtd, col_uni, col_rota, col_empresa, col_req, f"📍 Capacidade de Carga do Veículo: {rota_selecionada}")
 
             st.write("---")
-            st.subheader("📦 Sequência de Carregamento por Cliente")
-            if col_empresa in df_filtro.columns:
-                
-                def resumir_unidades(g):
+            st.subheader("📦 Conferência de Separação por Número de Pedido (NUMREQ)")
+            
+            if col_req in df_filtro.columns:
+                def resumir_pedido(g):
+                    items = len(g)
                     kg = g[g[col_uni].str.upper() == 'KG'][col_qtd].sum()
                     un = g[g[col_uni].str.upper() == 'UN'][col_qtd].sum()
                     bj = g[g[col_uni].str.upper() == 'BJ'][col_qtd].sum()
-                    outros = g[~g[col_uni].str.upper().isin(['KG', 'UN', 'BJ'])][col_qtd].sum()
                     
-                    partes = []
+                    partes = [f"{items} Itens"]
                     if kg > 0: partes.append(f"{kg:,.1f} KG")
                     if un > 0: partes.append(f"{int(un)} UND")
                     if bj > 0: partes.append(f"{int(bj)} BJ")
-                    if outros > 0: partes.append(f"{int(outros)} VOL")
                     return " | ".join(partes)
 
-                resumo_cliente = df_filtro.groupby(col_empresa, sort=False).apply(resumir_unidades).reset_index()
-                resumo_cliente.columns = ["Cliente / Ponto de Entrega", "Detalhamento da Carga"]
+                resumo_pedido = df_filtro.groupby([col_req, col_empresa], sort=False).apply(resumir_pedido).reset_index()
+                resumo_pedido.columns = ["Número do Pedido (NUMREQ)", "Cliente / Escola", "Resumo para Separador"]
 
                 if "Ordem de Carregamento" in modo_ordem:
-                    resumo_cliente = resumo_cliente.iloc[::-1].reset_index(drop=True)
-                    resumo_cliente.insert(0, 'Etapa de Carga', [f"{i+1}º a Carregar (Fundo)" if i==0 else f"{i+1}º a Carregar" for i in range(len(resumo_cliente))])
+                    resumo_pedido = resumo_pedido.iloc[::-1].reset_index(drop=True)
+                    resumo_pedido.insert(0, 'Etapa Carga', [f"{i+1}º Pedido no Fundo" if i==0 else f"{i+1}º Pedido" for i in range(len(resumo_pedido))])
                 else:
-                    resumo_cliente.insert(0, 'Etapa de Entrega', [f"{i+1}ª Entrega (Porta)" if i==0 else f"{i+1}ª Entrega" for i in range(len(resumo_cliente))])
+                    resumo_pedido.insert(0, 'Etapa Entrega', [f"{i+1}º Pedido na Porta" if i==0 else f"{i+1}º Pedido" for i in range(len(resumo_pedido))])
 
-                st.dataframe(resumo_cliente, use_container_width=True)
+                st.dataframe(resumo_pedido, use_container_width=True)
 
             st.write("---")
-            st.subheader("📋 Romaneio de Produtos")
+            st.subheader("📋 Romaneio Detalhado dos Produtos (Contabilidade e Balança)")
 
-            clientes_da_rota = ["-- Todos os Clientes da Rota --"] + list(df_filtro[col_empresa].unique())
-            cliente_selecionado = st.selectbox("Filtrar Romaneio por Cliente / Ponto de Entrega:", clientes_da_rota)
+            # Filtro por Pedido Individual
+            lista_pedidos = ["-- Todos os Pedidos da Rota --"] + [f"Pedido {p} - {c}" for p, c in zip(df_filtro[col_req], df_filtro[col_empresa])]
+            lista_pedidos = list(dict.fromkeys(lista_pedidos)) # remove duplicados
+            
+            pedido_selecionado = st.selectbox("Filtrar Romaneio por Pedido (NUMREQ):", lista_pedidos)
 
-            if cliente_selecionado != "-- Todos os Clientes da Rota --":
-                df_exibir_produtos = df_filtro[df_filtro[col_empresa] == cliente_selecionado]
-                st.info(f"Exibindo romaneio individual de: **{cliente_selecionado}**")
+            if pedido_selecionado != "-- Todos os Pedidos da Rota --":
+                num_p = pedido_selecionado.split(" - ")[0].replace("Pedido ", "")
+                df_exibir_produtos = df_filtro[df_filtro[col_req].astype(str) == str(num_p)]
+                st.info(f"Exibindo itens do pedido **{pedido_selecionado}**")
             else:
                 df_exibir_produtos = df_filtro
 
-            cols_exibir = [col for col in ['NUMREQ', col_empresa, col_prod, col_qtd, col_uni] if col in df_exibir_produtos.columns]
+            cols_exibir = [col for col in [col_req, col_empresa, col_prod, col_qtd, col_uni] if col in df_exibir_produtos.columns]
             st.dataframe(df_exibir_produtos[cols_exibir] if cols_exibir else df_exibir_produtos, use_container_width=True)
         else:
             st.warning("A coluna 'TRP_FANTASIA' não foi localizada na planilha enviada.")
