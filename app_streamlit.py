@@ -6,7 +6,6 @@ from supabase import create_client, Client
 
 st.set_page_config(page_title="Módulo Tropical - Sistema de Expedição", layout="wide", page_icon="🌴")
 
-# Endereço Fixo da Base de Saída (Galpão)
 ENDERECO_GALPAO = "Av. Comendador Aladino Selmi, 4840 - Vila San Martin, Campinas - SP, 13069-096"
 
 st.markdown("""
@@ -87,10 +86,10 @@ modulo = st.sidebar.radio(
     [
         "📋 Separação do Dia",
         "🚚 Carregamento & Rotas",
+        "🔮 Previsão de IA",
         "🗺️ Endereços das Escolas",
         "📦 Controle de Caixas & Fornecedores",
-        "✏️ Lançamentos Avulsos",
-        "🔮 Previsão de IA"
+        "✏️ Lançamentos Avulsos"
     ]
 )
 
@@ -99,6 +98,27 @@ def fmt_br_int(val):
 
 def fmt_br_float(val):
     return f"{val:,.1f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+def calcular_resumo_caixas(df, col_qtd, col_uni, col_prod):
+    kg_total = df[df[col_uni].str.upper() == 'KG'][col_qtd].sum() if col_uni in df.columns else 0
+    un_total = df[df[col_uni].str.upper() == 'UN'][col_qtd].sum() if col_uni in df.columns else 0
+    bj_total = df[df[col_uni].str.upper() == 'BJ'][col_qtd].sum() if col_uni in df.columns else 0
+    outros_total = df[~df[col_uni].str.upper().isin(['KG', 'UN', 'BJ'])][col_qtd].sum() if col_uni in df.columns else 0
+
+    if col_prod in df.columns and col_uni in df.columns:
+        df_ovos = df[df[col_uni].str.upper() == 'BJ']
+        bj_pvc = df_ovos[df_ovos[col_prod].str.upper().str.contains('PVC', na=False)][col_qtd].sum()
+        bj_comum = df_ovos[~df_ovos[col_prod].str.upper().str.contains('PVC', na=False)][col_qtd].sum()
+    else:
+        bj_pvc, bj_comum = 0, bj_total
+
+    cx_kg = math.ceil(kg_total / 20.0) if kg_total > 0 else 0
+    cx_un = math.ceil(un_total / 180.0) if un_total > 0 else 0
+    cx_outros = math.ceil(outros_total / 20.0) if outros_total > 0 else 0
+    cx_ovo_total = math.ceil(bj_pvc / 10.0) + math.ceil(bj_comum / 12.0)
+    
+    cx_total = cx_kg + cx_un + cx_outros + cx_ovo_total
+    return kg_total, un_total, bj_total, outros_total, cx_total, bj_pvc, bj_comum, cx_kg, cx_un, cx_outros
 
 def exibir_metricas_detalhadas(df, col_qtd, col_uni, col_rota, col_empresa, col_req, col_prod, titulo=""):
     if titulo:
@@ -110,10 +130,7 @@ def exibir_metricas_detalhadas(df, col_qtd, col_uni, col_rota, col_empresa, col_
     num_clientes = df[col_empresa].nunique() if col_empresa in df.columns else 0
     num_pedidos = df[col_req].nunique() if col_req in df.columns else 0
         
-    kg_total = df[df[col_uni].str.upper() == 'KG'][col_qtd].sum() if col_uni in df.columns else 0
-    un_total = df[df[col_uni].str.upper() == 'UN'][col_qtd].sum() if col_uni in df.columns else 0
-    bj_total = df[df[col_uni].str.upper() == 'BJ'][col_qtd].sum() if col_uni in df.columns else 0
-    outros_total = df[~df[col_uni].str.upper().isin(['KG', 'UN', 'BJ'])][col_qtd].sum() if col_uni in df.columns else 0
+    kg_total, un_total, bj_total, outros_total, cx_total_geral, bj_pvc, bj_comum, cx_kg, cx_un, cx_outros = calcular_resumo_caixas(df, col_qtd, col_uni, col_prod)
     
     c1.markdown(f'<div class="card-laranja"><div class="card-titulo">Rotas</div><div class="card-valor">{fmt_br_int(num_rotas)}</div></div>', unsafe_allow_html=True)
     c2.markdown(f'<div class="card-laranja"><div class="card-titulo">Clientes</div><div class="card-valor">{fmt_br_int(num_clientes)}</div></div>', unsafe_allow_html=True)
@@ -126,25 +143,11 @@ def exibir_metricas_detalhadas(df, col_qtd, col_uni, col_rota, col_empresa, col_
     # --- ESTIMATIVA DE CAIXAS ---
     st.markdown("##### 📦 Estimativa de Caixas e Embalagens de Separação")
     
-    if col_prod in df.columns and col_uni in df.columns:
-        df_ovos = df[df[col_uni].str.upper() == 'BJ']
-        bj_pvc = df_ovos[df_ovos[col_prod].str.upper().str.contains('PVC', na=False)][col_qtd].sum()
-        bj_comum = df_ovos[~df_ovos[col_prod].str.upper().str.contains('PVC', na=False)][col_qtd].sum()
-    else:
-        bj_pvc, bj_comum = 0, bj_total
-
-    cx_kg = math.ceil(kg_total / 20.0) if kg_total > 0 else 0
-    cx_un = math.ceil(un_total / 180.0) if un_total > 0 else 0
-    cx_outros = math.ceil(outros_total / 20.0) if outros_total > 0 else 0
-
     cx_pvc_fechadas = int(bj_pvc // 10)
     avulso_pvc = int(bj_pvc % 10)
 
     cx_comum_fechadas = int(bj_comum // 12)
     avulso_comum = int(bj_comum % 12)
-
-    cx_ovo_total = math.ceil(bj_pvc / 10.0) + math.ceil(bj_comum / 12.0)
-    cx_total_geral = cx_kg + cx_un + cx_outros + cx_ovo_total
 
     txt_pvc = f"{cx_pvc_fechadas} cx" + (f" + {avulso_pvc} bdj" if avulso_pvc > 0 else "")
     txt_comum = f"{cx_comum_fechadas} cx" + (f" + {avulso_comum} bdj" if avulso_comum > 0 else "")
@@ -209,7 +212,7 @@ if modulo == "📋 Separação do Dia":
             st.error(f"Erro ao processar planilha: {e}")
 
 # -------------------------------------------------------------------
-# 2. CARREGAMENTO & ROTAS (COM AGRUPAMENTO DE ROTAS E CLIENTES)
+# 2. CARREGAMENTO & ROTAS
 # -------------------------------------------------------------------
 elif modulo == "🚚 Carregamento & Rotas":
     st.header("🚚 Organização de Cargas e Roteirização por Veículo")
@@ -316,7 +319,68 @@ elif modulo == "🚚 Carregamento & Rotas":
         st.info("💡 Para visualizar as rotas e cargas por veículo, primeiro suba a planilha em '📋 Separação do Dia'.")
 
 # -------------------------------------------------------------------
-# 3. ENDEREÇOS DAS ESCOLAS & CADASTRO DE ROTAS
+# 3. PREVISÃO DE IA AUTOMÁTICA
+# -------------------------------------------------------------------
+elif modulo == "🔮 Previsão de IA":
+    st.header("🔮 Previsão de Produtividade do Galpão com IA")
+    st.caption("A inteligência analisa automaticamente os dados reais da planilha carregada.")
+
+    df_base = None
+    if 'df_separacao' in st.session_state and st.session_state['df_separacao'] is not None:
+        df_base = st.session_state['df_separacao']
+
+    col_qtd = 'Qtdade' if df_base is not None and 'Qtdade' in df_base.columns else 'QTD'
+    col_uni = 'UNIDADE' if df_base is not None and 'UNIDADE' in df_base.columns else 'UN'
+    col_prod = 'PRODUTO' if df_base is not None and 'PRODUTO' in df_base.columns else 'PRODUTO'
+
+    if df_base is not None and not df_base.empty:
+        kg_tot, un_tot, bj_tot, out_tot, cx_total_real, _, _, _, _, _ = calcular_resumo_caixas(df_base, col_qtd, col_uni, col_prod)
+        
+        c_i1, c_i2 = st.columns(2)
+        with c_i1:
+            dia_op = st.number_input("Dia da Operação", min_value=1, value=6)
+        with c_i2:
+            peso_op = st.number_input("Peso Total da Carga Utilizado (KG)", value=float(kg_tot), format="%.2f")
+
+        st.info(f"📊 **Dados Automáticos Identificados:** **{fmt_br_float(peso_op)} KG** em **{fmt_br_int(cx_total_real)} Caixas Totais** para separação.")
+
+        if st.button("🚀 Executar Previsão de IA no Render", type="primary"):
+            try:
+                res = requests.post(f"{API_IA_URL}/previsao_produtividade", json={"proximo_dia": int(dia_op), "proximo_peso_kg": float(peso_op)})
+                if res.status_code == 200:
+                    prod = res.json().get("produtividade_prevista", 114.7)
+                    prod = float(prod)
+                    
+                    tempo_horas = cx_total_real / prod if prod > 0 else 0
+                    horas_exatas = int(tempo_horas)
+                    minutos_exatos = int((tempo_horas - horas_exatas) * 60)
+
+                    st.markdown("---")
+                    st.subheader("🎯 Resultado do Planejamento Operacional")
+                    
+                    m1, m2, m3 = st.columns(3)
+                    m1.markdown(f'<div class="card-laranja"><div class="card-titulo">Produtividade Estimada</div><div class="card-valor">{prod:.1f} cx/h</div></div>', unsafe_allow_html=True)
+                    m2.markdown(f'<div class="card-verde"><div class="card-titulo">Volume Total a Separar</div><div class="card-valor">{fmt_br_int(cx_total_real)} caixas</div></div>', unsafe_allow_html=True)
+                    m3.markdown(f'<div class="card-laranja"><div class="card-titulo">Tempo Total de Operação</div><div class="card-valor">{horas_exatas}h {minutos_exatos}min</div></div>', unsafe_allow_html=True)
+
+                    st.write("---")
+                    st.subheader("👥 Simulação de Dimensionamento da Equipe de Galpão")
+                    qtd_separadores = st.slider("Selecione a quantidade de separadores no turno:", min_value=1, max_value=10, value=3)
+                    
+                    tempo_por_pessoa = tempo_horas / qtd_separadores
+                    h_p = int(tempo_por_pessoa)
+                    m_p = int((tempo_por_pessoa - h_p) * 60)
+
+                    st.success(f"Com **{qtd_separadores} separadores** trabalhando juntos, o galpão concluirá toda a carga em aproximadamente **{h_p} hora(s) e {m_p} minuto(s)**!")
+                else:
+                    st.error("Erro ao comunicar com o servidor da IA no Render.")
+            except Exception as e:
+                st.error(f"Falha ao conectar na IA: {e}")
+    else:
+        st.warning("💡 Por favor, primeiro suba a planilha na aba '📋 Separação do Dia' para carregar o peso real automaticamente.")
+
+# -------------------------------------------------------------------
+# 4. ENDEREÇOS DAS ESCOLAS
 # -------------------------------------------------------------------
 elif modulo == "🗺️ Endereços das Escolas":
     st.header("🗺️ Base de Endereços das Escolas & Pontos de Entrega")
@@ -351,7 +415,7 @@ elif modulo == "🗺️ Endereços das Escolas":
                 st.success(f"Endereço para '{c_nome}' registrado no banco de dados!")
 
 # -------------------------------------------------------------------
-# 4. CONTROLE DE CAIXAS & FORNECEDORES
+# 5. CONTROLE DE CAIXAS & FORNECEDORES
 # -------------------------------------------------------------------
 elif modulo == "📦 Controle de Caixas & Fornecedores":
     st.header("📦 Gestão de Embalagens e Entrada/Saída com Fornecedores")
@@ -370,7 +434,7 @@ elif modulo == "📦 Controle de Caixas & Fornecedores":
             st.success(f"Fornecedor '{nome_forn}' cadastrado!")
 
 # -------------------------------------------------------------------
-# 5. LANÇAMENTOS AVULSOS
+# 6. LANÇAMENTOS AVULSOS
 # -------------------------------------------------------------------
 elif modulo == "✏️ Lançamentos Avulsos":
     st.header("✏️ Lançamentos Avulsos e Ajustes de Estoque")
@@ -385,25 +449,3 @@ elif modulo == "✏️ Lançamentos Avulsos":
             
         if st.form_submit_button("Registrar Lançamento"):
             st.success("Lançamento registrado localmente!")
-
-# -------------------------------------------------------------------
-# 6. PREVISÃO DE IA
-# -------------------------------------------------------------------
-elif modulo == "🔮 Previsão de IA":
-    st.header("🔮 Previsão de Produtividade com IA")
-    col1, col2 = st.columns(2)
-    with col1:
-        dia_op = st.number_input("Dia da Operação", min_value=1, value=6)
-    with col2:
-        peso_op = st.number_input("Carga Prevista (KG)", min_value=100.0, value=850.0)
-        
-    if st.button("Consultar IA no Render"):
-        try:
-            res = requests.post(f"{API_IA_URL}/previsao_produtividade", json={"proximo_dia": int(dia_op), "proximo_peso_kg": float(peso_op)})
-            if res.status_code == 200:
-                prod = res.json().get("produtividade_prevista")
-                st.metric("Produtividade Estimada", f"{prod} cx/h")
-            else:
-                st.error("Erro na comunicação com a API de IA")
-        except Exception as e:
-            st.error(f"Falha ao conectar: {e}")
