@@ -3,7 +3,6 @@ import joblib
 import pandas as pd
 from sklearn.linear_model import LinearRegression
 
-# Dados de treino inicial de separação
 dados = [
     {"dias": 1, "peso_kg": 450.0, "produtividade": 85.0},
     {"dias": 2, "peso_kg": 520.0, "produtividade": 92.0},
@@ -19,6 +18,7 @@ y = df["produtividade"]
 modelo = LinearRegression()
 modelo.fit(X, y)
 
-os.makedirs("ia/models", exist_ok=True)
-joblib.dump(modelo, "ia/models/produtividade_model.pkl")
+# Garante o caminho correto no ambiente local e no Render
+os.makedirs("models", exist_ok=True)
+joblib.dump(modelo, "models/produtividade_model.pkl")
 print("✅ Modelo do Módulo Tropical treinado e salvo com sucesso!")

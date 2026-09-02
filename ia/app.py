@@ -5,7 +5,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 ml_models = {}
-MODEL_PATH = "ia/models/produtividade_model.pkl"
+MODEL_PATH = "models/produtividade_model.pkl"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
