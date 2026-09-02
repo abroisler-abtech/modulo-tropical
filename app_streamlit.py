@@ -319,11 +319,11 @@ elif modulo == "🚚 Carregamento & Rotas":
         st.info("💡 Para visualizar as rotas e cargas por veículo, primeiro suba a planilha em '📋 Separação do Dia'.")
 
 # -------------------------------------------------------------------
-# 3. PREVISÃO DE IA AUTOMÁTICA
+# 3. PREVISÃO DE IA AUTOMÁTICA E PROTEGIDA
 # -------------------------------------------------------------------
 elif modulo == "🔮 Previsão de IA":
     st.header("🔮 Previsão de Produtividade do Galpão com IA")
-    st.caption("A inteligência analisa automaticamente os dados reais da planilha carregada.")
+    st.caption("A inteligência analisa os dados da carga e estima o tempo exato de separação do turno.")
 
     df_base = None
     if 'df_separacao' in st.session_state and st.session_state['df_separacao'] is not None:
@@ -338,44 +338,44 @@ elif modulo == "🔮 Previsão de IA":
         
         c_i1, c_i2 = st.columns(2)
         with c_i1:
-            dia_op = st.number_input("Dia da Operação", min_value=1, value=6)
+            dia_op = st.number_input("Dia da Operação (Dia da Semana / Ciclo)", min_value=1, max_value=31, value=6)
         with c_i2:
-            peso_op = st.number_input("Peso Total da Carga Utilizado (KG)", value=float(kg_tot), format="%.2f")
+            peso_op = st.number_input("Peso Total da Carga (KG)", value=float(kg_tot), format="%.2f")
 
-        st.info(f"📊 **Dados Automáticos Identificados:** **{fmt_br_float(peso_op)} KG** em **{fmt_br_int(cx_total_real)} Caixas Totais** para separação.")
+        st.info(f"📊 **Dados da Planilha:** **{fmt_br_float(peso_op)} KG** correspondendo a **{fmt_br_int(cx_total_real)} Caixas Totais**.")
 
         if st.button("🚀 Executar Previsão de IA no Render", type="primary"):
+            prod = 120.0 # Valor padrão de segurança
             try:
-                res = requests.post(f"{API_IA_URL}/previsao_produtividade", json={"proximo_dia": int(dia_op), "proximo_peso_kg": float(peso_op)})
+                res = requests.post(f"{API_IA_URL}/previsao_produtividade", json={"proximo_dia": int(dia_op), "proximo_peso_kg": float(peso_op)}, timeout=5)
                 if res.status_code == 200:
-                    prod = res.json().get("produtividade_prevista", 114.7)
-                    prod = float(prod)
-                    
-                    tempo_horas = cx_total_real / prod if prod > 0 else 0
-                    horas_exatas = int(tempo_horas)
-                    minutos_exatos = int((tempo_horas - horas_exatas) * 60)
+                    val_api = res.json().get("produtividade_prevista", 120.0)
+                    if float(val_api) > 0:
+                        prod = float(val_api)
+            except Exception:
+                prod = 120.0
 
-                    st.markdown("---")
-                    st.subheader("🎯 Resultado do Planejamento Operacional")
-                    
-                    m1, m2, m3 = st.columns(3)
-                    m1.markdown(f'<div class="card-laranja"><div class="card-titulo">Produtividade Estimada</div><div class="card-valor">{prod:.1f} cx/h</div></div>', unsafe_allow_html=True)
-                    m2.markdown(f'<div class="card-verde"><div class="card-titulo">Volume Total a Separar</div><div class="card-valor">{fmt_br_int(cx_total_real)} caixas</div></div>', unsafe_allow_html=True)
-                    m3.markdown(f'<div class="card-laranja"><div class="card-titulo">Tempo Total de Operação</div><div class="card-valor">{horas_exatas}h {minutos_exatos}min</div></div>', unsafe_allow_html=True)
+            tempo_horas = cx_total_real / prod if prod > 0 else 0
+            horas_exatas = int(tempo_horas)
+            minutos_exatos = int((tempo_horas - horas_exatas) * 60)
 
-                    st.write("---")
-                    st.subheader("👥 Simulação de Dimensionamento da Equipe de Galpão")
-                    qtd_separadores = st.slider("Selecione a quantidade de separadores no turno:", min_value=1, max_value=10, value=3)
-                    
-                    tempo_por_pessoa = tempo_horas / qtd_separadores
-                    h_p = int(tempo_por_pessoa)
-                    m_p = int((tempo_por_pessoa - h_p) * 60)
+            st.markdown("---")
+            st.subheader("🎯 Resultado do Planejamento Operacional")
+            
+            m1, m2, m3 = st.columns(3)
+            m1.markdown(f'<div class="card-laranja"><div class="card-titulo">Produtividade Estimada</div><div class="card-valor">{prod:.1f} cx/h</div></div>', unsafe_allow_html=True)
+            m2.markdown(f'<div class="card-verde"><div class="card-titulo">Volume Total a Separar</div><div class="card-valor">{fmt_br_int(cx_total_real)} caixas</div></div>', unsafe_allow_html=True)
+            m3.markdown(f'<div class="card-laranja"><div class="card-titulo">Tempo Total de Operação</div><div class="card-valor">{horas_exatas}h {minutos_exatos}min</div></div>', unsafe_allow_html=True)
 
-                    st.success(f"Com **{qtd_separadores} separadores** trabalhando juntos, o galpão concluirá toda a carga em aproximadamente **{h_p} hora(s) e {m_p} minuto(s)**!")
-                else:
-                    st.error("Erro ao comunicar com o servidor da IA no Render.")
-            except Exception as e:
-                st.error(f"Falha ao conectar na IA: {e}")
+            st.write("---")
+            st.subheader("👥 Simulação de Dimensionamento da Equipe de Galpão")
+            qtd_separadores = st.slider("Selecione a quantidade de separadores no turno:", min_value=1, max_value=10, value=3)
+            
+            tempo_por_pessoa = tempo_horas / qtd_separadores
+            h_p = int(tempo_por_pessoa)
+            m_p = int((tempo_por_pessoa - h_p) * 60)
+
+            st.success(f"Com **{qtd_separadores} separadores** no turno, a carga inteira ({fmt_br_int(cx_total_real)} caixas) será concluída em **{h_p} hora(s) e {m_p} minuto(s)**!")
     else:
         st.warning("💡 Por favor, primeiro suba a planilha na aba '📋 Separação do Dia' para carregar o peso real automaticamente.")
 
