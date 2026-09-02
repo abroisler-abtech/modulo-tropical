@@ -105,7 +105,7 @@ elif modulo == "✏️ Lançamentos Avulsos":
                 supabase.table("lancamentos_avulsos").insert(data).execute()
                 st.success("Lançamento gravado no Supabase com sucesso!")
             else:
-                st.success(f"Lançamento registrado localmente!")
+                st.success("Lançamento registrado localmente!")
 
 # -------------------------------------------------------------------
 # 3. CONTROLE DE CAIXAS & FORNECEDORES
@@ -221,8 +221,15 @@ elif modulo == "🚚 Carregamento & Rotas":
         col_uni = 'UNIDADE' if 'UNIDADE' in df_rotas.columns else ('unidade' if 'unidade' in df_rotas.columns else 'UN')
 
         if col_rota in df_rotas.columns:
-            rotas_disponiveis = sorted(df_rotas[col_rota].dropna().unique().tolist())
-            rota_selecionada = st.selectbox("Selecione a Rota / Caminhão:", rotas_disponiveis)
+            col_sel1, col_sel2 = st.columns([2, 1])
+            with col_sel1:
+                rotas_disponiveis = sorted(df_rotas[col_rota].dropna().unique().tolist())
+                rota_selecionada = st.selectbox("Selecione a Rota / Caminhão:", rotas_disponiveis)
+            with col_sel2:
+                modo_ordem = st.radio(
+                    "Modo de Visualização:",
+                    ["🚚 Ordem de Carregamento (Fundo -> Porta)", "📍 Ordem de Entrega (1ª -> Última)"]
+                )
 
             df_filtro = df_rotas[df_rotas[col_rota] == rota_selecionada]
 
@@ -233,10 +240,17 @@ elif modulo == "🚚 Carregamento & Rotas":
             c3.metric("Volume Total", f"{df_filtro[col_qtd].sum():,.2f}")
 
             st.write("---")
-            st.subheader("📦 Agrupamento por Cliente (Ordem de Descarregamento - LIFO)")
+            st.subheader("📦 Sequência de Carregamento dos Clientes")
             if col_empresa in df_filtro.columns:
-                resumo_cliente = df_filtro.groupby(col_empresa)[col_qtd].sum().reset_index()
+                resumo_cliente = df_filtro.groupby(col_empresa, sort=False)[col_qtd].sum().reset_index()
                 resumo_cliente.columns = ["Cliente / Ponto de Entrega", "Volume Total (KG/UN)"]
+
+                if "Ordem de Carregamento" in modo_ordem:
+                    resumo_cliente = resumo_cliente.iloc[::-1].reset_index(drop=True)
+                    resumo_cliente.insert(0, 'Etapa de Carga', [f"{i+1}º a Carregar (Fundo)" if i==0 else f"{i+1}º a Carregar" for i in range(len(resumo_cliente))])
+                else:
+                    resumo_cliente.insert(0, 'Etapa de Entrega', [f"{i+1}ª Entrega (Porta)" if i==0 else f"{i+1}ª Entrega" for i in range(len(resumo_cliente))])
+
                 st.dataframe(resumo_cliente, use_container_width=True)
 
             st.subheader("📋 Romaneio Detalhado da Rota")
