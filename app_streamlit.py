@@ -69,7 +69,7 @@ st.markdown("""
     }
     .card-valor {
         color: #ffffff;
-        font-size: 15px;
+        font-size: 14px;
         font-weight: 800;
         text-align: center;
         width: 100%;
@@ -184,6 +184,11 @@ if modulo == "📲 Coletor / Terminal de Bipagem":
     st.header("📲 Coletor de Separação (Terminal do Galpão)")
     st.caption("Compatível com leitor de código de barras ou digitação de fichas/NUMREQ.")
 
+    # Puxa total de pedidos da base ERP se carregada
+    df_base = st.session_state.get('df_separacao', None)
+    col_req = 'NUMREQ' if df_base is not None and 'NUMREQ' in df_base.columns else ('PEDIDO' if df_base is not None and 'PEDIDO' in df_base.columns else None)
+    total_pedidos_erp = df_base[col_req].nunique() if (df_base is not None and col_req) else 0
+
     # Busca bipagens de hoje no Supabase
     bipagens_hoje = []
     if supabase:
@@ -195,16 +200,23 @@ if modulo == "📲 Coletor / Terminal de Bipagem":
 
     df_bip = pd.DataFrame(bipagens_hoje) if bipagens_hoje else pd.DataFrame(columns=["numreq", "operador", "origem", "data_registro"])
 
-    # Contadores por Operação
-    cnt_erp = len(df_bip[df_bip["origem"] == "Base ERP (Escolas)"]) if "origem" in df_bip.columns else len(df_bip)
+    # Contadores de Bipagens por Operação
+    bip_erp = len(df_bip[df_bip["origem"] == "Base ERP (Escolas)"]) if "origem" in df_bip.columns else len(df_bip)
     cnt_campinas = len(df_bip[df_bip["origem"] == "Campinas"]) if "origem" in df_bip.columns else 0
     cnt_estado = len(df_bip[df_bip["origem"] == "Estado"]) if "origem" in df_bip.columns else 0
     cnt_confruty = len(df_bip[df_bip["origem"] == "Confruty"]) if "origem" in df_bip.columns else 0
     cnt_vinhedo = len(df_bip[df_bip["origem"] == "Vinhedo"]) if "origem" in df_bip.columns else 0
 
+    # Formatação dos textos dos cards
+    if total_pedidos_erp > 0:
+        pct_erp = (bip_erp / total_pedidos_erp) * 100
+        txt_erp = f"{bip_erp} / {total_pedidos_erp} ped<br><span style='font-size:11px; font-weight:normal;'>({pct_erp:.1f}%)</span>"
+    else:
+        txt_erp = f"{bip_erp} bipagens"
+
     st.markdown("##### 📊 Bipagens Realizadas Hoje por Operação")
     o1, o2, o3, o4, o5 = st.columns(5)
-    o1.markdown(f'<div class="card-laranja"><div class="card-titulo">Base ERP (Escolas)</div><div class="card-valor">{cnt_erp} bipagens</div></div>', unsafe_allow_html=True)
+    o1.markdown(f'<div class="card-laranja"><div class="card-titulo">Base ERP (Escolas)</div><div class="card-valor">{txt_erp}</div></div>', unsafe_allow_html=True)
     o2.markdown(f'<div class="card-azul"><div class="card-titulo">Campinas</div><div class="card-valor">{cnt_campinas} bipagens</div></div>', unsafe_allow_html=True)
     o3.markdown(f'<div class="card-azul"><div class="card-titulo">Estado</div><div class="card-valor">{cnt_estado} bipagens</div></div>', unsafe_allow_html=True)
     o4.markdown(f'<div class="card-azul"><div class="card-titulo">Confruty</div><div class="card-valor">{cnt_confruty} bipagens</div></div>', unsafe_allow_html=True)
