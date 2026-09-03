@@ -184,12 +184,10 @@ if modulo == "📲 Coletor / Terminal de Bipagem":
     st.header("📲 Coletor de Separação (Terminal do Galpão)")
     st.caption("Compatível com leitor de código de barras ou digitação de fichas/NUMREQ.")
 
-    # Puxa total de pedidos da base ERP se carregada
     df_base = st.session_state.get('df_separacao', None)
     col_req = 'NUMREQ' if df_base is not None and 'NUMREQ' in df_base.columns else ('PEDIDO' if df_base is not None and 'PEDIDO' in df_base.columns else None)
     total_pedidos_erp = df_base[col_req].nunique() if (df_base is not None and col_req) else 0
 
-    # Busca bipagens de hoje no Supabase
     bipagens_hoje = []
     if supabase:
         try:
@@ -200,14 +198,13 @@ if modulo == "📲 Coletor / Terminal de Bipagem":
 
     df_bip = pd.DataFrame(bipagens_hoje) if bipagens_hoje else pd.DataFrame(columns=["numreq", "operador", "origem", "data_registro"])
 
-    # Contadores de Bipagens por Operação
-    bip_erp = len(df_bip[df_bip["origem"] == "Base ERP (Escolas)"]) if "origem" in df_bip.columns else len(df_bip)
+    # Suporte para nomes anteriores e novo nome Base ERP
+    bip_erp = len(df_bip[df_bip["origem"].isin(["Base ERP", "Base ERP (Escolas)"])]) if "origem" in df_bip.columns else len(df_bip)
     cnt_campinas = len(df_bip[df_bip["origem"] == "Campinas"]) if "origem" in df_bip.columns else 0
     cnt_estado = len(df_bip[df_bip["origem"] == "Estado"]) if "origem" in df_bip.columns else 0
     cnt_confruty = len(df_bip[df_bip["origem"] == "Confruty"]) if "origem" in df_bip.columns else 0
     cnt_vinhedo = len(df_bip[df_bip["origem"] == "Vinhedo"]) if "origem" in df_bip.columns else 0
 
-    # Formatação dos textos dos cards
     if total_pedidos_erp > 0:
         pct_erp = (bip_erp / total_pedidos_erp) * 100
         txt_erp = f"{bip_erp} / {total_pedidos_erp} ped<br><span style='font-size:11px; font-weight:normal;'>({pct_erp:.1f}%)</span>"
@@ -216,7 +213,7 @@ if modulo == "📲 Coletor / Terminal de Bipagem":
 
     st.markdown("##### 📊 Bipagens Realizadas Hoje por Operação")
     o1, o2, o3, o4, o5 = st.columns(5)
-    o1.markdown(f'<div class="card-laranja"><div class="card-titulo">Base ERP (Escolas)</div><div class="card-valor">{txt_erp}</div></div>', unsafe_allow_html=True)
+    o1.markdown(f'<div class="card-laranja"><div class="card-titulo">Base ERP</div><div class="card-valor">{txt_erp}</div></div>', unsafe_allow_html=True)
     o2.markdown(f'<div class="card-azul"><div class="card-titulo">Campinas</div><div class="card-valor">{cnt_campinas} bipagens</div></div>', unsafe_allow_html=True)
     o3.markdown(f'<div class="card-azul"><div class="card-titulo">Estado</div><div class="card-valor">{cnt_estado} bipagens</div></div>', unsafe_allow_html=True)
     o4.markdown(f'<div class="card-azul"><div class="card-titulo">Confruty</div><div class="card-valor">{cnt_confruty} bipagens</div></div>', unsafe_allow_html=True)
@@ -231,7 +228,7 @@ if modulo == "📲 Coletor / Terminal de Bipagem":
         
         operacao_sel = st.selectbox(
             "1. Selecione a Origem da Separação:",
-            ["Base ERP (Escolas)", "Campinas", "Estado", "Confruty", "Vinhedo"]
+            ["Base ERP", "Campinas", "Estado", "Confruty", "Vinhedo"]
         )
         
         operador_cod = st.text_input("2. Código / Crachá do Separador:")
@@ -486,13 +483,13 @@ elif modulo == "🔮 Previsão de IA":
         m3.markdown(f'<div class="card-laranja"><div class="card-titulo">Tempo Estimado do Turno</div><div class="card-valor">{horas_exatas}h {minutos_exatos}min</div></div>', unsafe_allow_html=True)
 
         if qtd_separadores == 41:
-            st.success(f"Com o quadro completo de **41 separadores**, a equipe entregará toda a carga ({fmt_br_int(cx_total_real)} caixas) em exatamente **{horas_exatas}h {minutos_exatos}min**!")
+            st.success(f"Com o quadro completo de **41 separadores**, a equipe entregará toda a carga ({fmt_br_int(cx_total_real)} caixas) em exatamente **{horas_exatas}h {minutos_exatas}min**!")
         else:
             faltas = 41 - qtd_separadores
             if faltas > 0:
-                st.warning(f"⚠️ Com **{faltas} falta(s)** registrada(s) ({qtd_separadores} presentes), o tempo total de separação subirá para **{horas_exatas}h {minutos_exatos}min**.")
+                st.warning(f"⚠️ Com **{faltas} falta(s)** registrada(s) ({qtd_separadores} presentes), o tempo total de separação subirá para **{horas_exatas}h {minutos_exatas}min**.")
             else:
-                st.success(f"Com equipe reforçada ({qtd_separadores} pessoas), a carga será concluída em **{horas_exatas}h {minutos_exatos}min**!")
+                st.success(f"Com equipe reforçada ({qtd_separadores} pessoas), a carga será concluída em **{horas_exatas}h {minutos_exatas}min**!")
 
     else:
         st.warning("💡 Por favor, primeiro suba a planilha na aba '📋 Separação do Dia (ERP)' para carregar os volumes da carga.")
