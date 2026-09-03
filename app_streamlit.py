@@ -87,9 +87,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("🌴 Módulo Tropical - Sistema Integrado de Expedição & Operação")
-st.caption(f"📍 Base de Saída / Galpão: {ENDERECO_GALPAO}")
-
 SUPABASE_URL = st.secrets.get("SUPABASE_URL", "https://nlgxmrtxemyxjxqekkno.supabase.co")
 SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", "")
 
@@ -104,23 +101,98 @@ def get_supabase_client(url: str, key: str):
 
 supabase = get_supabase_client(SUPABASE_URL, SUPABASE_KEY)
 
+# -------------------------------------------------------------------
+# SISTEMA DE USUÁRIOS E PERMISSÕES (SESSION STATE)
+# -------------------------------------------------------------------
+if "usuarios_db" not in st.session_state:
+    st.session_state["usuarios_db"] = {
+        "admin": {"nome": "André Broisler", "senha": "123", "perfil": "Administrador"},
+        "recebimento": {"nome": "Operador Recebimento", "senha": "123", "perfil": "Recebimento de Mercadoria"},
+        "caixaria": {"nome": "Operador Caixaria", "senha": "123", "perfil": "Caixaria"},
+        "conferente": {"nome": "Conferente Doca", "senha": "123", "perfil": "Conferente"},
+        "motorista": {"nome": "Motorista Agregado", "senha": "123", "perfil": "Motorista"}
+    }
+
+if "usuario_logado" not in st.session_state:
+    st.session_state["usuario_logado"] = None
+
+# TELA DE LOGIN SE NÃO ESTIVER AUTENTICADO
+if st.session_state["usuario_logado"] is None:
+    st.title("🌴 Módulo Tropical — Autenticação de Usuário")
+    st.caption("Acesso Restrito ao Sistema de Expedição e Controle Operacional")
+
+    col_l1, col_l2 = st.columns([1, 1.5])
+    with col_l1:
+        with st.form("form_login"):
+            user_input = st.text_input("Usuário / Login:")
+            pass_input = st.text_input("Senha:", type="password")
+            btn_entrar = st.form_submit_button("🔑 Acessar Sistema", type="primary", use_container_width=True)
+
+            if btn_entrar:
+                u_data = st.session_state["usuarios_db"].get(user_input.strip().lower())
+                if u_data and u_data["senha"] == pass_input:
+                    st.session_state["usuario_logado"] = {
+                        "login": user_input.strip().lower(),
+                        "nome": u_data["nome"],
+                        "perfil": u_data["perfil"]
+                    }
+                    st.success(f"Bem-vindo(a), {u_data['nome']}!")
+                    st.rerun()
+                else:
+                    st.error("❌ Usuário ou senha incorretos!")
+        
+        st.info("💡 **Acessos Rápidos de Teste:**\n- `admin` | senha: `123`\n- `recebimento` | senha: `123`\n- `caixaria` | senha: `123`\n- `conferente` | senha: `123`\n- `motorista` | senha: `123`")
+    st.stop()
+
+# USUÁRIO LOGADO
+user_curr = st.session_state["usuario_logado"]
+
+# MENU DE NAVEGAÇÃO DE ACORDO COM O PERFIL
+st.sidebar.markdown(f"👤 **Usuário:** `{user_curr['nome']}`\n\n🛡️ **Perfil:** `{user_curr['perfil']}`")
+if st.sidebar.button("🚪 Sair do Sistema"):
+    st.session_state["usuario_logado"] = None
+    st.rerun()
+
+st.sidebar.write("---")
+
+TODOS_MODULOS = [
+    "📋 1. Importar Base do Dia (ERP)",
+    "⚙️ 2. Gestão de Rotas & Unificação",
+    "🔮 3. Previsão de IA & Dimensionamento",
+    "📲 4. Coletor / Terminal de Bipagem",
+    "📱 5. Conferência Mobile & Picking",
+    "🚚 6. Carregamento & Cupom de Saída",
+    "📍 7. Entregas & Devolução de Caixas",
+    "📦 8. Recebimento de Mercadoria",
+    "🪵 9. Gestão de Caixaria & Saída",
+    "👥 10. Gestão de Usuários & Perfis",
+    "🗺️ Endereços das Escolas",
+    "✏️ Lançamentos Avulsos"
+]
+
+# FILTRO DE PERMISSÕES DE MENU
+perfil_usr = user_curr["perfil"]
+
+if perfil_usr == "Administrador":
+    modulos_permitidos = TODOS_MODULOS
+elif perfil_usr == "Recebimento de Mercadoria":
+    modulos_permitidos = ["📦 8. Recebimento de Mercadoria"]
+elif perfil_usr == "Caixaria":
+    modulos_permitidos = ["🪵 9. Gestão de Caixaria & Saída"]
+elif perfil_usr == "Separador":
+    modulos_permitidos = ["📲 4. Coletor / Terminal de Bipagem"]
+elif perfil_usr == "Conferente":
+    modulos_permitidos = ["📱 5. Conferência Mobile & Picking"]
+elif perfil_usr == "Motorista":
+    modulos_permitidos = ["🚚 6. Carregamento & Cupom de Saída", "📍 7. Entregas & Devolução de Caixas"]
+else:
+    modulos_permitidos = TODOS_MODULOS
+
 st.sidebar.markdown("### Navegação do Módulo Tropical")
-modulo = st.sidebar.radio(
-    "",
-    [
-        "📋 1. Importar Base do Dia (ERP)",
-        "⚙️ 2. Gestão de Rotas & Unificação",
-        "🔮 3. Previsão de IA & Dimensionamento",
-        "📲 4. Coletor / Terminal de Bipagem",
-        "📱 5. Conferência Mobile & Picking",
-        "🚚 6. Carregamento & Cupom de Saída",
-        "📍 7. Entregas & Devolução de Caixas",
-        "📦 8. Recebimento de Mercadoria",
-        "🪵 9. Gestão de Caixaria & Saída",
-        "🗺️ Endereços das Escolas",
-        "✏️ Lançamentos Avulsos"
-    ]
-)
+modulo = st.sidebar.radio("", modulos_permitidos)
+
+st.title("🌴 Módulo Tropical - Sistema Integrado de Expedição & Operação")
+st.caption(f"📍 Base de Saída / Galpão: {ENDERECO_GALPAO}")
 
 def fmt_br_int(val):
     return f"{int(val):,}".replace(",", ".")
@@ -511,7 +583,7 @@ elif modulo == "📱 5. Conferência Mobile & Picking":
                 with c_cx2:
                     st.text_input("Ovos no Pedido (Fechado/Regra):", value=txt_ovos_blindado, disabled=True)
 
-                conferente_nome = st.session_state.get('usuario_ativo', 'Conferente 01')
+                conferente_nome = user_curr["nome"]
 
                 if st.button("✅ Finalizar & Aprovar Pedido", type="primary", use_container_width=True):
                     if not todas_checadas:
@@ -655,7 +727,7 @@ elif modulo == "🚚 6. Carregamento & Cupom de Saída":
             st.markdown("### 📋 Checklist de Carregamento do Veículo (Fundo -> Porta)")
             st.caption("Marque cada empresa/unidade conforme embarca no caminhão:")
 
-            motorista_nome = st.text_input("Nome do Motorista / Agregado:", value="Motorista Agregado 01")
+            motorista_nome = st.text_input("Nome do Motorista / Agregado:", value=user_curr["nome"])
             placa_veiculo = st.text_input("Placa do Veículo:", value="ABC-1234")
 
             empresas_embarcadas = []
@@ -1036,6 +1108,69 @@ elif modulo == "🪵 9. Gestão de Caixaria & Saída":
             df_ext = df_ext[df_ext["Nome"].str.lower().str.contains(forn_filtro.strip().lower())]
 
         st.dataframe(df_ext, use_container_width=True)
+
+# -------------------------------------------------------------------
+# 10. GESTÃO DE USUÁRIOS E PERFIS
+# -------------------------------------------------------------------
+elif modulo == "👥 10. Gestão de Usuários & Perfis":
+    st.header("👥 Painel de Gestão de Usuários & Controle de Permissões")
+    st.caption("Cadastre novos operadores e defina quais telas do menu estarão visíveis para cada perfil.")
+
+    tab_u1, tab_u2 = st.tabs(["📝 Novo Cadastro de Usuário", "📋 Usuários Cadastrados & Perfis"])
+
+    with tab_u1:
+        st.subheader("➕ Cadastrar Novo Acesso")
+        
+        col_cad1, col_cad2 = st.columns(2)
+        with col_cad1:
+            novo_login = st.text_input("Login de Acesso (sem espaços):", placeholder="Ex: joao.caixaria")
+            novo_nome = st.text_input("Nome Completo do Colaborador:", placeholder="Ex: João da Silva")
+        with col_cad2:
+            nova_senha = st.text_input("Senha Inicial:", type="password", value="123")
+            novo_perfil = st.selectbox("Perfil de Acesso / Nível de Permissão:", [
+                "Administrador",
+                "Recebimento de Mercadoria",
+                "Caixaria",
+                "Separador",
+                "Conferente",
+                "Motorista"
+            ])
+
+        if st.button("💾 Cadastrar Usuário no Sistema", type="primary", use_container_width=True):
+            if not novo_login.strip() or not novo_nome.strip():
+                st.warning("⚠️ Preencha o login e o nome completo do colaborador!")
+            else:
+                login_clean = novo_login.strip().lower()
+                st.session_state["usuarios_db"][login_clean] = {
+                    "nome": novo_nome.strip(),
+                    "senha": nova_senha,
+                    "perfil": novo_perfil
+                }
+                st.success(f"✅ Usuário `{login_clean}` registrado com sucesso no perfil [{novo_perfil}]!")
+
+    with tab_u2:
+        st.subheader("📋 Lista de Usuários do Módulo Tropical")
+        
+        lista_usr_view = []
+        for log, d in st.session_state["usuarios_db"].items():
+            lista_usr_view.append({
+                "Login": log,
+                "Nome do Colaborador": d["nome"],
+                "Perfil de Permissão": d["perfil"]
+            })
+
+        st.dataframe(pd.DataFrame(lista_usr_view), use_container_width=True)
+
+        st.markdown("---")
+        st.markdown("#### 🛡️ Regras de Visibilidade do Menu por Perfil:")
+        st.write("""
+        - **Administrador**: Acesso Irrestrito a todos os Módulos.
+        - **Recebimento de Mercadoria**: Vê apenas `📦 8. Recebimento de Mercadoria`.
+        - **Caixaria**: Vê apenas `🪵 9. Gestão de Caixaria & Saída`.
+        - **Separador**: Vê apenas `📲 4. Coletor / Terminal de Bipagem`.
+        - **Conferente**: Vê apenas `📱 5. Conferência Mobile & Picking`.
+        - **Motorista**: Vê apenas `🚚 6. Carregamento` e `📍 7. Entregas & Devolução`.
+        """)
 
 # -------------------------------------------------------------------
 # CADASTROS E AUXILIARES
