@@ -10,8 +10,17 @@ st.set_page_config(page_title="Módulo Tropical - Sistema de Expedição", layou
 ENDERECO_GALPAO = "Av. Comendador Aladino Selmi, 4840 - Vila San Martin, Campinas - SP, 13069-096"
 HOJE_STR = datetime.now().strftime("%Y-%m-%d")
 
+# CSS com Regra de Impressão (@media print)
 st.markdown("""
 <style>
+    @media print {
+        section[data-testid="stSidebar"] { display: none !important; }
+        .stButton { display: none !important; }
+        header { display: none !important; }
+        footer { display: none !important; }
+        .no-print { display: none !important; }
+        .print-area { display: block !important; width: 100%; }
+    }
     .card-laranja {
         background-color: #d35400;
         border: 2px solid #e67e22;
@@ -261,7 +270,6 @@ if modulo == "📱 Conferência Mobile & Picking":
                 with c_cx1:
                     qtd_tropical = st.number_input("Caixas Tropical (Hortifrúti):", min_value=0, value=0, step=1)
                 with c_cx2:
-                    # CAMPO DE OVO FECHADO E BLINDADO COM EXIBIÇÃO EXATA
                     st.text_input("Ovos no Pedido (Fechado/Regra):", value=txt_ovos_blindado, disabled=True)
 
                 conferente_nome = st.session_state.get('usuario_ativo', 'Conferente 01')
@@ -356,7 +364,42 @@ if modulo == "📱 Conferência Mobile & Picking":
                     st.dataframe(pedidos_conf_rota[cols_show], use_container_width=True)
 
                     cod_barras_rota = f"PICKING-{HOJE_STR.replace('-','')}-{rota_sel_picking.replace(' ','')}"
-                    st.success(f"🎟️ **CÓDIGO DE BARRAS GERAL DE CARREGAMENTO (PICKING):** `{cod_barras_rota}`")
+                    
+                    # --- BOTÃO E LAYOUT PRONTO PARA IMPRESSÃO ---
+                    st.markdown("---")
+                    st.subheader("🖨️ Impressão de Etiqueta / Romaneio de Carregamento")
+                    
+                    if st.button("🖨️ Abrir Ficha de Impressão (PDF / Térmica)", type="primary"):
+                        st.components.v1.html(
+                            f"""
+                            <script>
+                                window.print();
+                            </script>
+                            """,
+                            height=0
+                        )
+
+                    # Template de Impressão em HTML
+                    html_print = f"""
+                    <div style="border:2px solid #000; padding:20px; font-family:Arial, sans-serif; background-color:#fff; color:#000;">
+                        <div style="text-align:center; border-bottom:2px solid #000; padding-bottom:10px;">
+                            <h2 style="margin:0;">🌴 MÓDULO TROPICAL — EXPEDIÇÃO & CARREGAMENTO</h2>
+                            <h3 style="margin:5px 0;">FICHA DE PICKING — ROTA: {rota_sel_picking}</h3>
+                            <p style="margin:0;">Data: {HOJE_STR} | Base: Campinas</p>
+                        </div>
+                        <div style="margin-top:15px; font-size:16px;">
+                            <p><strong>Total de Caixas Tropical:</strong> {tot_tropical} cx</p>
+                            <p><strong>Total de Volumes de Ovos:</strong> {tot_ovos_vols} vol</p>
+                            <p><strong>TOTAL GERAL A CARREGAR NO CAMINHÃO:</strong> {tot_geral_caixas} volumes</p>
+                        </div>
+                        <div style="text-align:center; margin-top:20px; border-top:2px solid #000; padding-top:15px;">
+                            <img src="https://bwipjs-api.metafloor.com/?bcid=code128&text={cod_barras_rota}&scale=3&rotate=N&includetext" alt="Código de Barras">
+                            <p style="font-family:monospace; font-weight:bold; font-size:16px; margin-top:5px;">{cod_barras_rota}</p>
+                        </div>
+                    </div>
+                    """
+                    st.markdown(html_print, unsafe_allow_html=True)
+
                 else:
                     st.info("Nenhum pedido desta rota foi conferido no celular ainda.")
 
@@ -665,11 +708,11 @@ elif modulo == "🔮 Previsão de IA":
         m3.markdown(f'<div class="card-laranja"><div class="card-titulo">Tempo Estimado do Turno</div><div class="card-valor">{horas_exatas}h {minutos_exatos}min</div></div>', unsafe_allow_html=True)
 
         if qtd_separadores == 41:
-            st.success(f"Com o quadro completo de **41 separadores**, a equipe entregará toda a carga ({fmt_br_int(cx_total_real)} caixas) em exatamente **{horas_exatas}h {minutos_exatas}min**!")
+            st.success(f"Com o quadro completo de **41 separadores**, a equipe entregará toda a carga ({fmt_br_int(cx_total_real)} caixas) em exatamente **{horas_exatas}h {minutos_exatos}min**!")
         else:
             faltas = 41 - qtd_separadores
             if faltas > 0:
-                st.warning(f"⚠️ Com **{faltas} falta(s)** registrada(s) ({qtd_separadores} presentes), o tempo total de separação subirá para **{horas_exatas}h {minutos_exatos}min**.")
+                st.warning(f"⚠️ Com **{faltas} falta(s)** registrada(s) ({qtd_separadores} presentes), o tempo total de separação subirá para **{horas_exatas}h {minutos_exatas}min**.")
             else:
                 st.success(f"Com equipe reforçada ({qtd_separadores} pessoas), a carga será concluída em **{horas_exatas}h {minutos_exatas}min**!")
 
