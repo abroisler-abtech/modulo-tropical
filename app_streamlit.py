@@ -204,7 +204,6 @@ if modulo == "📱 Conferência Mobile & Picking":
 
             lista_pedidos_opt = ["-- Selecione o Pedido --"] + sorted(df_base[col_req].astype(str).unique().tolist())
             
-            # Ajuste: Iniciar em branco e carregar quando selecionado ou bipado
             if cod_bipado.strip() in lista_pedidos_opt:
                 ped_selecionado = cod_bipado.strip()
             else:
@@ -229,22 +228,21 @@ if modulo == "📱 Conferência Mobile & Picking":
                     if not check:
                         todas_checadas = False
 
-                # --- CÁLCULO AUTOMÁTICO DE OVOS DO PEDIDO SELECIONADO ---
                 kg_p, un_p, bj_p, out_p, cx_tot_p, bj_pvc_p, bj_com_p, cx_kg_p, cx_un_p, cx_out_p = calcular_resumo_caixas(df_ped, col_qtd, col_uni, col_prod)
-                
                 cx_ovos_sugerida = math.ceil(bj_pvc_p / 10.0) + math.ceil(bj_com_p / 12.0)
-                cx_tropical_sugerida = cx_kg_p + cx_un_p + cx_out_p
 
                 st.markdown("---")
                 st.markdown("#### 📦 Quantidade de Embalagens Encontradas")
                 
                 if bj_p > 0:
-                    st.info(f"🥚 **Detalhamento de Ovos no Pedido:** {int(bj_pvc_p)} bdj PVC + {int(bj_com_p)} bdj Comum (Calculado: **{cx_ovos_sugerida} cx**) ")
+                    st.info(f"🥚 **Detalhamento de Ovos no Pedido:** {int(bj_pvc_p)} bdj PVC + {int(bj_com_p)} bdj Comum (Calculado: **{cx_ovos_sugerida} cx**)")
 
                 c_cx1, c_cx2 = st.columns(2)
                 with c_cx1:
-                    qtd_tropical = st.number_input("Caixas Tropical (Hortifrúti):", min_value=0, value=int(cx_tropical_sugerida), step=1)
+                    # Caixas Tropical inicia zerada (0) para o conferente digitar
+                    qtd_tropical = st.number_input("Caixas Tropical (Hortifrúti):", min_value=0, value=0, step=1)
                 with c_cx2:
+                    # Caixas de Ovos permanece calculada automaticamente
                     qtd_ovos = st.number_input("Caixas / Bandejas de Ovos:", min_value=0, value=int(cx_ovos_sugerida), step=1)
 
                 conferente_nome = st.session_state.get('usuario_ativo', 'Conferente 01')
@@ -252,6 +250,8 @@ if modulo == "📱 Conferência Mobile & Picking":
                 if st.button("✅ Finalizar & Aprovar Pedido", type="primary", use_container_width=True):
                     if not todas_checadas:
                         st.warning("⚠️ Atenção: Nem todos os itens foram marcados no checklist!")
+                    if qtd_tropical == 0 and (cx_kg_p + cx_un_p + cx_out_p) > 0:
+                        st.warning("⚠️ Você confirmou 0 Caixas Tropical para este pedido. Verifique se a quantidade está correta!")
                     
                     dados_conferencia = {
                         "numreq": str(ped_selecionado),
@@ -648,7 +648,7 @@ elif modulo == "🔮 Previsão de IA":
         else:
             faltas = 41 - qtd_separadores
             if faltas > 0:
-                st.warning(f"⚠️ Com **{faltas} falta(s)** registrada(s) ({qtd_separadores} presentes), o tempo total de separação subirá para **{horas_exatas}h {minutos_exatas}min**.")
+                st.warning(f"⚠️ Com **{faltas} falta(s)** registrada(s) ({qtd_separadores} presentes), o tempo total de separação subirá para **{horas_exatas}h {minutos_exatos}min**.")
             else:
                 st.success(f"Com equipe reforçada ({qtd_separadores} pessoas), a carga será concluída em **{horas_exatas}h {minutos_exatos}min**!")
 
