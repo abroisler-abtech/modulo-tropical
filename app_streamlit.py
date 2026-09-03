@@ -139,6 +139,29 @@ def calcular_resumo_caixas(df, col_qtd, col_uni, col_prod):
     cx_total = cx_kg + cx_un + cx_outros + cx_ovo_total
     return kg_total, un_total, bj_total, outros_total, cx_total, bj_pvc, bj_comum, cx_kg, cx_un, cx_outros
 
+def formatar_descricao_ovos(bj_pvc, bj_comum):
+    if bj_pvc == 0 and bj_comum == 0:
+        return "Sem Ovos", 0
+
+    cx_pvc = int(bj_pvc // 10)
+    bdj_pvc = int(bj_pvc % 10)
+    cx_com = int(bj_comum // 12)
+    bdj_com = int(bj_comum % 12)
+
+    cx_fechadas = cx_pvc + cx_com
+    bdj_avulsas = bdj_pvc + bdj_com
+
+    partes = []
+    if cx_fechadas > 0:
+        partes.append(f"{cx_fechadas} {'caixa' if cx_fechadas == 1 else 'caixas'}")
+    if bdj_avulsas > 0:
+        partes.append(f"{bdj_avulsas} {'bandeja' if bdj_avulsas == 1 else 'bandejas'}")
+
+    txt_final = " + ".join(partes) if partes else "Sem Ovos"
+    vol_tot_ovos = cx_fechadas + (1 if bdj_avulsas > 0 else 0)
+
+    return txt_final, vol_tot_ovos
+
 def exibir_metricas_detalhadas(df, col_qtd, col_uni, col_rota, col_empresa, col_req, col_prod, titulo=""):
     if titulo:
         st.markdown(f"#### {titulo}")
@@ -229,21 +252,17 @@ if modulo == "📱 Conferência Mobile & Picking":
                         todas_checadas = False
 
                 kg_p, un_p, bj_p, out_p, cx_tot_p, bj_pvc_p, bj_com_p, cx_kg_p, cx_un_p, cx_out_p = calcular_resumo_caixas(df_ped, col_qtd, col_uni, col_prod)
-                cx_ovos_sugerida = math.ceil(bj_pvc_p / 10.0) + math.ceil(bj_com_p / 12.0)
+                txt_ovos_blindado, vol_ovos_num = formatar_descricao_ovos(bj_pvc_p, bj_com_p)
 
                 st.markdown("---")
                 st.markdown("#### 📦 Quantidade de Embalagens Encontradas")
-                
-                if bj_p > 0:
-                    st.info(f"🥚 **Detalhamento de Ovos no Pedido:** {int(bj_pvc_p)} bdj PVC + {int(bj_com_p)} bdj Comum (Calculado: **{cx_ovos_sugerida} cx**)")
 
                 c_cx1, c_cx2 = st.columns(2)
                 with c_cx1:
-                    # Caixas Tropical inicia zerada (0) para o conferente digitar
                     qtd_tropical = st.number_input("Caixas Tropical (Hortifrúti):", min_value=0, value=0, step=1)
                 with c_cx2:
-                    # Caixas de Ovos permanece calculada automaticamente
-                    qtd_ovos = st.number_input("Caixas / Bandejas de Ovos:", min_value=0, value=int(cx_ovos_sugerida), step=1)
+                    # CAMPO DE OVO FECHADO E BLINDADO COM EXIBIÇÃO EXATA
+                    st.text_input("Ovos no Pedido (Fechado/Regra):", value=txt_ovos_blindado, disabled=True)
 
                 conferente_nome = st.session_state.get('usuario_ativo', 'Conferente 01')
 
@@ -258,7 +277,8 @@ if modulo == "📱 Conferência Mobile & Picking":
                         "cliente": str(nome_cliente),
                         "rota": str(nome_rota),
                         "caixas_tropical": int(qtd_tropical),
-                        "caixas_ovos": int(qtd_ovos),
+                        "caixas_ovos": vol_ovos_num,
+                        "desc_ovos": str(txt_ovos_blindado),
                         "conferente": str(conferente_nome),
                         "status": "CONFERIDO",
                         "data_registro": HOJE_STR
@@ -291,7 +311,7 @@ if modulo == "📱 Conferência Mobile & Picking":
             except Exception:
                 res_conf = []
 
-        df_conf = pd.DataFrame(res_conf) if res_conf else pd.DataFrame(columns=["numreq", "cliente", "rota", "caixas_tropical", "caixas_ovos", "conferente", "status"])
+        df_conf = pd.DataFrame(res_conf) if res_conf else pd.DataFrame(columns=["numreq", "cliente", "rota", "caixas_tropical", "caixas_ovos", "desc_ovos", "conferente", "status"])
 
         if df_base is not None and not df_base.empty:
             col_rota = 'TRP_FANTASIA' if 'TRP_FANTASIA' in df_base.columns else 'ROTA'
@@ -323,16 +343,17 @@ if modulo == "📱 Conferência Mobile & Picking":
 
                 if not pedidos_conf_rota.empty:
                     tot_tropical = pedidos_conf_rota["caixas_tropical"].sum()
-                    tot_ovos = pedidos_conf_rota["caixas_ovos"].sum()
-                    tot_geral_caixas = tot_tropical + tot_ovos
+                    tot_ovos_vols = pedidos_conf_rota["caixas_ovos"].sum()
+                    tot_geral_caixas = tot_tropical + tot_ovos_vols
 
                     c_pick1, c_pick2, c_pick3 = st.columns(3)
                     c_pick1.markdown(f'<div class="card-verde"><div class="card-titulo">Total Caixas Tropical</div><div class="card-valor">{tot_tropical} cx</div></div>', unsafe_allow_html=True)
-                    c_pick2.markdown(f'<div class="card-verde"><div class="card-titulo">Total Caixas de Ovos</div><div class="card-valor">{tot_ovos} cx</div></div>', unsafe_allow_html=True)
-                    c_pick3.markdown(f'<div class="card-laranja"><div class="card-titulo">Total Geral a Carregar</div><div class="card-valor">{tot_geral_caixas} cx</div></div>', unsafe_allow_html=True)
+                    c_pick2.markdown(f'<div class="card-verde"><div class="card-titulo">Volumes Ovos</div><div class="card-valor">{tot_ovos_vols} vol</div></div>', unsafe_allow_html=True)
+                    c_pick3.markdown(f'<div class="card-laranja"><div class="card-titulo">Total Geral a Carregar</div><div class="card-valor">{tot_geral_caixas} vol</div></div>', unsafe_allow_html=True)
 
                     st.markdown("##### 🏢 Empresas e Caixas do Veículo")
-                    st.dataframe(pedidos_conf_rota[["numreq", "cliente", "caixas_tropical", "caixas_ovos", "conferente"]], use_container_width=True)
+                    cols_show = [c for c in ["numreq", "cliente", "caixas_tropical", "desc_ovos", "conferente"] if c in pedidos_conf_rota.columns]
+                    st.dataframe(pedidos_conf_rota[cols_show], use_container_width=True)
 
                     cod_barras_rota = f"PICKING-{HOJE_STR.replace('-','')}-{rota_sel_picking.replace(' ','')}"
                     st.success(f"🎟️ **CÓDIGO DE BARRAS GERAL DE CARREGAMENTO (PICKING):** `{cod_barras_rota}`")
@@ -644,13 +665,13 @@ elif modulo == "🔮 Previsão de IA":
         m3.markdown(f'<div class="card-laranja"><div class="card-titulo">Tempo Estimado do Turno</div><div class="card-valor">{horas_exatas}h {minutos_exatos}min</div></div>', unsafe_allow_html=True)
 
         if qtd_separadores == 41:
-            st.success(f"Com o quadro completo de **41 separadores**, a equipe entregará toda a carga ({fmt_br_int(cx_total_real)} caixas) em exatamente **{horas_exatas}h {minutos_exatos}min**!")
+            st.success(f"Com o quadro completo de **41 separadores**, a equipe entregará toda a carga ({fmt_br_int(cx_total_real)} caixas) em exatamente **{horas_exatas}h {minutos_exatas}min**!")
         else:
             faltas = 41 - qtd_separadores
             if faltas > 0:
                 st.warning(f"⚠️ Com **{faltas} falta(s)** registrada(s) ({qtd_separadores} presentes), o tempo total de separação subirá para **{horas_exatas}h {minutos_exatos}min**.")
             else:
-                st.success(f"Com equipe reforçada ({qtd_separadores} pessoas), a carga será concluída em **{horas_exatas}h {minutos_exatos}min**!")
+                st.success(f"Com equipe reforçada ({qtd_separadores} pessoas), a carga será concluída em **{horas_exatas}h {minutos_exatas}min**!")
 
     else:
         st.warning("💡 Por favor, primeiro suba a planilha na aba '📋 Separação do Dia (ERP)' para carregar os volumes da carga.")
