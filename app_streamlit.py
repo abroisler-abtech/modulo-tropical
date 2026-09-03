@@ -782,101 +782,159 @@ elif modulo == "📍 7. Entregas & Devolução de Caixas":
         st.info("Nenhuma carga liberada para entrega no momento. Realize a conferência e o carregamento do veículo primeiro.")
 
 # -------------------------------------------------------------------
-# 8. CONTROLE DE CAIXAS & FORNECEDORES (VERSÃO SIMPLIFICADA E LIMPA)
+# 8. CONTROLE DE CAIXAS & FORNECEDORES (RECEBIMENTO vs CAIXARIA)
 # -------------------------------------------------------------------
 elif modulo == "📦 8. Controle de Caixas & Fornecedores":
-    st.header("📦 Gestão de Embalagens e Conta Corrente de Fornecedores")
-    st.caption("Registro simples e direto de movimentação de embalagens por fornecedor.")
+    st.header("📦 Gestão de Embalagens — Recebimento & Caixaria")
+    st.caption("Fluxo dividido: O Recebimento registra a entrada da carga e a Caixaria efetua a saída e o acerto.")
 
-    tab_mov, tab_extrato = st.tabs(["📋 Registrar Movimentação", "📊 Extrato de Conta Corrente"])
+    tab_receb, tab_caixaria, tab_extrato = st.tabs([
+        "📥 1. Recebimento de Mercadoria (Entrada)", 
+        "📤 2. Setor da Caixaria (Saída & Acerto)", 
+        "📊 3. Extrato de Conta Corrente"
+    ])
 
-    with tab_mov:
-        st.subheader("📝 Lançamento de Entrada e Saída")
+    # 1. TELA DO RECEBIMENTO DE MERCADORIA
+    with tab_receb:
+        st.subheader("📥 Registro de Entrada de Carga no Galpão")
         
-        c_orig1, c_orig2 = st.columns(2)
-        with c_orig1:
-            origem_mov = st.selectbox("Local / Origem:", ["Galpão Tropical (Campinas)", "CEASA Campinas", "CEASA São Paulo (CEAGESP)"])
-        with c_orig2:
-            fornecedor_nome = st.text_input("Nome do Fornecedor / Produtor:", placeholder="Ex: Produtor Batata / Ceasa SP...")
+        c_r1, c_r2 = st.columns(2)
+        with c_r1:
+            origem_ent = st.selectbox("Local de Recebimento:", ["Galpão Tropical (Campinas)", "CEASA Campinas", "CEASA São Paulo (CEAGESP)"])
+            fornecedor_ent = st.text_input("Nome do Fornecedor / Produtor:", placeholder="Ex: Produtor Batata Silva...")
+        with c_r2:
+            doc_ref_ent = st.text_input("Nº Nota Fiscal / Romaneio de Entrada:", placeholder="Ex: NF 10234")
+            tipo_emb_ent = st.selectbox("Tipo de Embalagem Recebida:", [
+                "Caixa Tropical (Hortifrúti)", "Palete PBR", "Caixa Louca ALTA", "Caixa Louca BAIXA", "Madeira / Banana / Grade / Tipo K"
+            ])
 
-        doc_ref = st.text_input("Nº Nota Fiscal / Romaneio:", placeholder="Ex: NF 12345")
+        qtd_ent_str = st.text_input("Quantidade de Embalagens Recebidas (Entrada):", value="0")
+        qtd_ent_num = int(qtd_ent_str) if qtd_ent_str.isdigit() else 0
+        obs_ent = st.text_input("Observações do Recebimento:", placeholder="Ex: Chegou paletizado em boas condições")
 
-        st.markdown("---")
-        c_emb1, c_emb2, c_emb3 = st.columns(3)
-        with c_emb1:
-            tipo_embalagem = st.selectbox(
-                "Tipo de Embalagem:",
-                ["Caixa Tropical (Hortifrúti)", "Palete PBR", "Caixa Louca ALTA", "Caixa Louca BAIXA", "Madeira / Banana / Grade / Tipo K"]
-            )
-        with c_emb2:
-            qtd_entrada_str = st.text_input("Quantidade ENTRADA (Chegando):", value="0")
-        with c_emb3:
-            qtd_saida_str = st.text_input("Quantidade SAÍDA (Levando):", value="0")
-
-        qtd_ent = int(qtd_entrada_str) if qtd_entrada_str.isdigit() else 0
-        qtd_sai = int(qtd_saida_str) if qtd_saida_str.isdigit() else 0
-
-        obs_mov = st.text_input("Observações:", placeholder="Ex: Devolução de paletes / Troca direta")
-
-        if st.button("💾 Salvar Registro e Atualizar Saldo", type="primary", use_container_width=True):
-            if not fornecedor_nome.strip():
-                st.warning("⚠️ Digite o nome do fornecedor!")
+        if st.button("💾 Registrar Entrada no Recebimento", type="primary", use_container_width=True):
+            if not fornecedor_ent.strip():
+                st.warning("⚠️ Informe o nome do fornecedor!")
+            elif qtd_ent_num <= 0:
+                st.warning("⚠️ A quantidade de entrada deve ser maior que 0!")
             else:
-                registro_mov = {
-                    "origem": origem_mov,
-                    "fornecedor": fornecedor_nome.strip(),
-                    "doc_ref": doc_ref.strip(),
-                    "embalagem": tipo_embalagem,
-                    "qtd_entrada": qtd_ent,
-                    "qtd_saida": qtd_sai,
-                    "obs": obs_mov,
+                dado_ent = {
+                    "origem": origem_ent,
+                    "fornecedor": fornecedor_ent.strip(),
+                    "doc_ref": doc_ref_ent.strip(),
+                    "embalagem": tipo_emb_ent,
+                    "qtd_entrada": qtd_ent_num,
+                    "qtd_saida": 0,
+                    "status": "PENDENTE_CAIXARIA",
+                    "obs_entrada": obs_ent,
                     "data_registro": HOJE_STR
                 }
                 if supabase:
                     try:
-                        supabase.table("movimentacao_caixas").insert(registro_mov).execute()
-                        st.success(f"✅ Movimentação registrada com sucesso para {fornecedor_nome}!")
+                        supabase.table("movimentacao_caixas").insert(dado_ent).execute()
+                        st.success(f"✅ Entrada de {qtd_ent_num} {tipo_emb_ent} de {fornecedor_ent} enviada para a Caixaria!")
                     except Exception as e:
-                        st.error(f"Erro ao salvar: {e}")
+                        st.error(f"Erro ao salvar recebimento: {e}")
                 else:
-                    st.success(f"✅ Movimentação registrada localmente para {fornecedor_nome}!")
+                    st.success(f"✅ Entrada registrada localmente para {fornecedor_ent}!")
 
-                # Se houver quantidade de saída, habilita a emissão do cupom
-                if qtd_sai > 0:
+    # 2. TELA DO SETOR DA CAIXARIA
+    with tab_caixaria:
+        st.subheader("📤 Baixa de Vasilhames & Liberação de Saída")
+        st.caption("Selecione a entrada realizada pelo Recebimento para liberar os vasilhames e emitir o Cupom.")
+
+        res_entradas = []
+        if supabase:
+            try:
+                r = supabase.table("movimentacao_caixas").select("*").eq("status", "PENDENTE_CAIXARIA").execute()
+                res_entradas = r.data if r.data else []
+            except Exception:
+                res_entradas = []
+
+        # Simulação visual caso o banco esteja vazio
+        if not res_entradas:
+            res_entradas = [
+                {"id": 1, "fornecedor": "Produtor Batata Silva", "embalagem": "Palete PBR", "qtd_entrada": 12, "doc_ref": "NF 8840", "origem": "Galpão Tropical (Campinas)"},
+                {"id": 2, "fornecedor": "Goiaba Atibaia", "embalagem": "Caixa Tropical (Hortifrúti)", "qtd_entrada": 50, "doc_ref": "NF 9120", "origem": "CEASA Campinas"}
+            ]
+
+        df_pend = pd.DataFrame(res_entradas)
+
+        if not df_pend.empty:
+            st.markdown("##### 📋 Cargas Aguardando Liberação na Caixaria:")
+            
+            item_selecionado = None
+            for idx, row in df_pend.iterrows():
+                chk = st.checkbox(
+                    f"🏢 **{row.get('fornecedor')}** | NF: `{row.get('doc_ref')}` | Entrou: **{row.get('qtd_entrada')} x {row.get('embalagem')}** ({row.get('origem')})",
+                    key=f"caix_{row.get('id')}"
+                )
+                if chk:
+                    item_selecionado = row
+
+            if item_selecionado is not None:
+                st.write("---")
+                st.markdown(f"### ⚙️ Processar Saída para: `{item_selecionado.get('fornecedor')}`")
+
+                tipo_operacao_saida = st.selectbox(
+                    "Tipo de Liberação da Caixaria:",
+                    [
+                        "🔄 Troca com Caixa (Devolução no mesmo valor)",
+                        "📦 Saída Sem Caixa (Fornecedor leva caixa vazia devendo)",
+                        "🪵 Somente Palete (Fornecedor leva palete sem nada)",
+                        "🚫 Sem Nada (Fornecedor sai sem nenhuma embalagem)"
+                    ]
+                )
+
+                c_cx_s1, c_cx_s2 = st.columns(2)
+                with c_cx_s1:
+                    qtd_sai_real_str = st.text_input("Quantidade Liberada/Devolvida na Saída:", value="0")
+                with c_cx_s2:
+                    obs_caixaria = st.text_input("Observação da Caixaria:", placeholder="Ex: Devolvido 10 caixas vazias")
+
+                qtd_sai_real = int(qtd_sai_real_str) if qtd_sai_real_str.isdigit() else 0
+
+                if st.button("🚀 Processar Saída & Emitir Cupom da Caixaria", type="primary", use_container_width=True):
+                    st.success(f"✅ Saída processada na Caixaria para {item_selecionado.get('fornecedor')}!")
+
                     st.markdown("---")
-                    st.subheader("🧾 CUPOM DE SAÍDA / COMPROVANTE DE EMBALAGENS")
+                    st.subheader("🧾 CUPOM DE SAÍDA — CAIXARIA")
                     if st.button("🖨️ Imprimir Cupom de Saída", type="primary"):
                         st.components.v1.html("<script>window.print();</script>", height=0)
 
-                    html_cupom_forn = f"""
+                    html_cupom_caixaria = f"""
                     <div style="border:2px dashed #000; padding:15px; font-family:Arial, sans-serif; background-color:#fff; color:#000;">
                         <div style="text-align:center; border-bottom:1px solid #000; padding-bottom:5px;">
-                            <h3 style="margin:0;">🌴 MÓDULO TROPICAL — COMPROVANTE DE EMBALAGENS</h3>
-                            <p style="margin:0; font-size:12px;">Data: {HOJE_STR} | Origem: {origem_mov}</p>
+                            <h3 style="margin:0;">🌴 MÓDULO TROPICAL — CUPOM DE SAÍDA / CAIXARIA</h3>
+                            <p style="margin:0; font-size:12px;">Data: {HOJE_STR} | Origem: {item_selecionado.get('origem')}</p>
                         </div>
                         <div style="margin-top:10px; font-size:13px;">
-                            <p><strong>Fornecedor / Produtor:</strong> {fornecedor_nome.strip()}</p>
-                            <p><strong>Embalagem:</strong> {tipo_embalagem}</p>
-                            <p><strong>Entrada:</strong> {qtd_ent} | <strong>Saída (Retirado):</strong> {qtd_sai}</p>
-                            <p><strong>Documento de Ref:</strong> {doc_ref.strip()}</p>
+                            <p><strong>Fornecedor:</strong> {item_selecionado.get('fornecedor')}</p>
+                            <p><strong>NF / Documento:</strong> {item_selecionado.get('doc_ref')}</p>
+                            <p><strong>Tipo de Embalagem:</strong> {item_selecionado.get('embalagem')}</p>
+                            <p><strong>Quantidade Recebida (Entrada):</strong> {item_selecionado.get('qtd_entrada')}</p>
+                            <p><strong>Quantidade Liberada (Saída):</strong> {qtd_sai_real}</p>
+                            <p><strong>Modo de Saída:</strong> {tipo_operacao_saida}</p>
+                            <p><strong>Observação Caixaria:</strong> {obs_caixaria}</p>
                         </div>
                         <div style="margin-top:20px; display:flex; justify-content:space-between; font-size:11px; text-align:center;">
-                            <div>___________________________________<br>Assinatura Conferencia Galpão</div>
+                            <div>___________________________________<br>Assinatura Operador Caixaria</div>
                             <div>___________________________________<br>Assinatura Fornecedor/Motorista</div>
                         </div>
                     </div>
                     """
-                    st.markdown(html_cupom_forn, unsafe_allow_html=True)
+                    st.markdown(html_cupom_caixaria, unsafe_allow_html=True)
+        else:
+            st.info("Nenhuma entrada pendente de baixa na Caixaria neste momento.")
 
+    # 3. TELA DO EXTRATO
     with tab_extrato:
-        st.subheader("📊 Extrato de Saldo por Fornecedor")
-        
+        st.subheader("📊 Extrato de Conta Corrente por Fornecedor")
         forn_filtro = st.text_input("🔍 Filtrar por Nome do Fornecedor:", placeholder="Digite o nome do fornecedor para pesquisar...")
 
         dados_extrato_limpo = [
-            {"Fornecedor": "Produtor de Batata Y", "Embalagem": "Palete PBR", "Entrada": 12, "Saída": 0, "Saldo Atual": "Devendo 12 Paletes"},
-            {"Fornecedor": "Goiaba Silva (Atibaia)", "Embalagem": "Caixa Tropical", "Entrada": 0, "Saída": 45, "Saldo Atual": "Fornecedor com 45 Caixas"},
-            {"Fornecedor": "Distribuidora Ceasa SP", "Embalagem": "Caixa Louca ALTA", "Entrada": 30, "Saída": 0, "Saldo Atual": "Devendo 30 Caixas Loucas"}
+            {"Fornecedor": "Produtor Batata Silva", "Embalagem": "Palete PBR", "Entrada": 12, "Saída": 0, "Saldo": "Devendo 12 Paletes"},
+            {"Fornecedor": "Goiaba Atibaia", "Embalagem": "Caixa Tropical", "Entrada": 50, "Saída": 50, "Saldo": "Quitado (Troca 1:1)"}
         ]
         
         df_ext = pd.DataFrame(dados_extrato_limpo)
