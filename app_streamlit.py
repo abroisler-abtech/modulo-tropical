@@ -794,18 +794,29 @@ elif modulo == "📦 8. Recebimento de Mercadoria":
     c_r1, c_r2 = st.columns(2)
     with c_r1:
         origem_ent = st.selectbox("Local de Recebimento:", ["Galpão Tropical (Campinas)", "CEASA Campinas", "CEASA São Paulo (CEAGESP)"])
-        fornecedor_ent = st.text_input("Nome do Fornecedor / Produtor:", placeholder="Ex: Goiaba Atibaia / Batata Silva...")
+        fornecedor_ent = st.text_input("Nome do Fornecedor / Produtor:", placeholder="Ex: Produtor Maçã / Ovos Silva / Goiaba Atibaia...")
     with c_r2:
         doc_ref_ent = st.text_input("Nº Nota Fiscal / Romaneio de Entrada:", placeholder="Ex: NF 10234")
         tipo_emb_ent = st.selectbox("Tipo de Embalagem Recebida:", [
-            "Caixa Tropical (Hortifrúti)", "Palete PBR", "Caixa Louca ALTA", "Caixa Louca BAIXA", "Madeira / Banana / Grade / Tipo K"
+            "Caixa Tropical (Hortifrúti)", 
+            "Palete PBR", 
+            "Caixa Louca ALTA", 
+            "Caixa Louca BAIXA", 
+            "📦 Papelão Descartável (Maçã / Ovos)", 
+            "🍌 Madeira / Banana / Grade / Tipo K"
         ])
+
+    is_retornavel = "Papelão" not in tipo_emb_ent and "Madeira" not in tipo_emb_ent and "Banana" not in tipo_emb_ent
 
     qtd_ent_str = st.text_input("Quantidade de Embalagens Recebidas (Entrada):", value="0")
     qtd_ent_num = int(qtd_ent_str) if qtd_ent_str.isdigit() else 0
+
+    if not is_retornavel:
+        st.info("ℹ️ Embalagem Descartável / Retenção: Fica no galpão como propriedade da empresa.")
+
     obs_ent = st.text_input("Observações do Recebimento:", placeholder="Ex: Entrada em perfeitas condições")
 
-    if st.button("💾 Registrar Entrada e Enviar para Caixaria", type="primary", use_container_width=True):
+    if st.button("💾 Registrar Entrada no Recebimento", type="primary", use_container_width=True):
         if not fornecedor_ent.strip():
             st.warning("⚠️ Informe o nome do fornecedor!")
         elif qtd_ent_num <= 0:
@@ -816,6 +827,7 @@ elif modulo == "📦 8. Recebimento de Mercadoria":
                 "fornecedor": fornecedor_ent.strip(),
                 "doc_ref": doc_ref_ent.strip(),
                 "embalagem": tipo_emb_ent,
+                "retornavel": is_retornavel,
                 "qtd_entrada": qtd_ent_num,
                 "qtd_saida": 0,
                 "status": "PENDENTE_CAIXARIA",
@@ -825,21 +837,26 @@ elif modulo == "📦 8. Recebimento de Mercadoria":
             if supabase:
                 try:
                     supabase.table("movimentacao_caixas").insert(dado_ent).execute()
-                    st.success(f"✅ Entrada de {qtd_ent_num} {tipo_emb_ent} de {fornecedor_ent} enviada para o Setor de Caixaria!")
+                    st.success(f"✅ Entrada de {qtd_ent_num} {tipo_emb_ent} de {fornecedor_ent} enviada para a Caixaria!")
                 except Exception as e:
                     st.error(f"Erro ao salvar recebimento: {e}")
             else:
                 st.success(f"✅ Entrada registrada localmente para {fornecedor_ent}!")
 
 # -------------------------------------------------------------------
-# 9. GESTÃO DE CAIXARIA & SAÍDA (MÓDULO SEPARADO)
+# 9. GESTÃO DE CAIXARIA, SAÍDA & VENDA DE EMBALAGENS
 # -------------------------------------------------------------------
 elif modulo == "🪵 9. Gestão de Caixaria & Saída":
-    st.header("🪵 Módulo de Gestão de Caixaria (Doca de Saída / Vasilhames)")
-    st.caption("Efetue a liberação de embalagens e emita o Cupom de Saída assinado.")
+    st.header("🪵 Módulo de Gestão de Caixaria & Comercialização")
+    st.caption("Efetue devoluções de vasilhames ou registre a venda avulsa de caixas/papelão.")
 
-    tab_caix_pend, tab_caix_extrato = st.tabs(["📤 Liberação de Saída por Fornecedor", "📊 Extrato Geral de Saldos"])
+    tab_caix_pend, tab_venda, tab_caix_extrato = st.tabs([
+        "📤 Devolução / Saída Fornecedores", 
+        "💰 Venda / Comercialização de Caixas", 
+        "📊 Extrato Geral de Saldos"
+    ])
 
+    # 1. DEVOLUÇÃO E SAÍDA DE FORNECEDORES
     with tab_caix_pend:
         res_entradas = []
         if supabase:
@@ -851,8 +868,9 @@ elif modulo == "🪵 9. Gestão de Caixaria & Saída":
 
         if not res_entradas:
             res_entradas = [
-                {"id": 1, "fornecedor": "Goiaba Atibaia", "embalagem": "Caixa Tropical (Hortifrúti)", "qtd_entrada": 100, "doc_ref": "NF 9120", "origem": "CEASA Campinas"},
-                {"id": 2, "fornecedor": "Produtor Batata Silva", "embalagem": "Palete PBR", "qtd_entrada": 12, "doc_ref": "NF 8840", "origem": "Galpão Tropical (Campinas)"}
+                {"id": 1, "fornecedor": "Goiaba Atibaia", "embalagem": "Caixa Tropical (Hortifrúti)", "qtd_entrada": 100, "doc_ref": "NF 9120", "origem": "CEASA Campinas", "retornavel": True},
+                {"id": 2, "fornecedor": "Maçã Funchal", "embalagem": "📦 Papelão Descartável (Maçã / Ovos)", "qtd_entrada": 200, "doc_ref": "NF 4410", "origem": "Galpão Tropical (Campinas)", "retornavel": False},
+                {"id": 3, "fornecedor": "Banana Laranjal", "embalagem": "🍌 Madeira / Banana / Grade / Tipo K", "qtd_entrada": 80, "doc_ref": "NF 3302", "origem": "Galpão Tropical (Campinas)", "retornavel": False}
             ]
 
         df_pend = pd.DataFrame(res_entradas)
@@ -861,7 +879,8 @@ elif modulo == "🪵 9. Gestão de Caixaria & Saída":
         
         item_sel = None
         for idx, row in df_pend.iterrows():
-            lbl = f"🏢 **{row.get('fornecedor')}** | NF: `{row.get('doc_ref')}` | Entrada: **{row.get('qtd_entrada')} x {row.get('embalagem')}** ({row.get('origem')})"
+            tag_tipo = "🟢 Retornável" if row.get('retornavel', True) else "🟡 Retenção / Descartável"
+            lbl = f"🏢 **{row.get('fornecedor')}** | NF: `{row.get('doc_ref')}` | Entrada: **{row.get('qtd_entrada')} x {row.get('embalagem')}** [{tag_tipo}]"
             chk = st.checkbox(lbl, key=f"chk_cx_{row.get('id')}")
             if chk:
                 item_sel = row
@@ -869,30 +888,39 @@ elif modulo == "🪵 9. Gestão de Caixaria & Saída":
         if item_sel is not None:
             st.write("---")
             st.markdown(f"### ⚙️ Registrar Saída de Vasilhames — `{item_sel.get('fornecedor')}`")
-            st.info(f"📥 **Carga de Entrada Registrada:** **{item_sel.get('qtd_entrada')} unidades** de **{item_sel.get('embalagem')}**.")
+            st.info(f"📥 **Entrada Registrada:** **{item_sel.get('qtd_entrada')} unidades** de **{item_sel.get('embalagem')}**.")
 
-            st.markdown("#### 📦 Quantidades Liberadas na Saída:")
+            is_madeira = "Madeira" in item_sel.get('embalagem') or "Banana" in item_sel.get('embalagem')
+            devolver_madeira = False
 
-            chk_saida_zero = st.checkbox("🚫 **Saída Zero / Sem Devolução** (Motorista sai sem levar embalagens)", key="chk_zero")
+            if is_madeira:
+                st.warning("⚠️ **Caixas de Madeira/Banana:** O padrão é retenção da empresa. Marque a opção abaixo somente se for devolver ao fornecedor!")
+                devolver_madeira = st.checkbox(f"⚠️ Devolver Caixas de Madeira (Limite máximo: {item_sel.get('qtd_entrada')} caixas)", key="chk_dev_mad")
 
-            c_s1, c_s2, c_s3 = st.columns(3)
+            chk_saida_zero = st.checkbox("🚫 **Saída Zero / Sem Devolução** (Zerar campos como atalho)", key="chk_zero")
+
+            c_s1, c_s2, c_s3, c_s4 = st.columns(4)
             with c_s1:
-                qtd_sai_trop = st.text_input("Caixas Tropical Saindo:", value="0", disabled=chk_saida_zero)
+                qtd_sai_trop = st.text_input("Caixas Tropical Saindo:", value="0", key="inp_trop")
             with c_s2:
-                qtd_sai_pbr = st.text_input("Paletes PBR Saindo:", value="0", disabled=chk_saida_zero)
+                qtd_sai_pbr = st.text_input("Paletes PBR Saindo:", value="0", key="inp_pbr")
             with c_s3:
-                qtd_sai_louca = st.text_input("Caixas Loucas Saindo:", value="0", disabled=chk_saida_zero)
+                qtd_sai_louca = st.text_input("Caixas Loucas Saindo:", value="0", key="inp_louca")
+            with c_s4:
+                val_mad_max = item_sel.get('qtd_entrada') if devolver_madeira else 0
+                qtd_sai_mad_str = st.text_input(f"Caixas Madeira Saindo (Máx {val_mad_max}):", value="0", disabled=not devolver_madeira, key="inp_mad")
 
-            val_trop = 0 if chk_saida_zero else (int(qtd_sai_trop) if qtd_sai_trop.isdigit() else 0)
-            val_pbr = 0 if chk_saida_zero else (int(qtd_sai_pbr) if qtd_sai_pbr.isdigit() else 0)
-            val_louca = 0 if chk_saida_zero else (int(qtd_sai_louca) if qtd_sai_louca.isdigit() else 0)
+            val_trop = int(qtd_sai_trop) if qtd_sai_trop.isdigit() else 0
+            val_pbr = int(qtd_sai_pbr) if qtd_sai_pbr.isdigit() else 0
+            val_louca = int(qtd_sai_louca) if qtd_sai_louca.isdigit() else 0
+            val_mad = int(qtd_sai_mad_str) if qtd_sai_mad_str.isdigit() else 0
+
+            # Trava de segurança para caixas de madeira
+            if is_madeira and devolver_madeira and val_mad > item_sel.get('qtd_entrada'):
+                st.error(f"⛔ **ERRO DE SEGURANÇA:** Não é possível devolver {val_mad} caixas de madeira! O limite máximo desta NF é {item_sel.get('qtd_entrada')} caixas.")
 
             motorista_forn = st.text_input("Nome/Placa do Motorista do Fornecedor:", placeholder="Ex: João Silva - Placa ABC-1234")
             obs_caix = st.text_input("Observações da Caixaria:", placeholder="Ex: Saída efetuada com visto")
-
-            # Cálculo prévio do saldo resultante
-            saldo_trop_result = (item_sel.get('qtd_entrada') if "Tropical" in item_sel.get('embalagem') else 0) - val_trop
-            saldo_pbr_result = (item_sel.get('qtd_entrada') if "Palete" in item_sel.get('embalagem') else 0) - val_pbr
 
             if st.button("🚀 Confirmar Saída & Gerar Cupom da Caixaria", type="primary", use_container_width=True):
                 st.success(f"✅ Saída registrada com sucesso para {item_sel.get('fornecedor')}!")
@@ -913,11 +941,12 @@ elif modulo == "🪵 9. Gestão de Caixaria & Saída":
                         <p><strong>NF / Documento:</strong> {item_sel.get('doc_ref')}</p>
                         <p><strong>Entrada Recebida:</strong> {item_sel.get('qtd_entrada')} x {item_sel.get('embalagem')}</p>
                         <hr style="border:0.5px solid #ccc;">
-                        <p><strong>SAÍDA LIBERADA:</strong></p>
+                        <p><strong>SAÍDA LIBERADA / REGISTRADA:</strong></p>
                         <ul>
                             <li>Caixas Tropical: {val_trop} cx</li>
                             <li>Paletes PBR: {val_pbr} un</li>
                             <li>Caixas Loucas: {val_louca} cx</li>
+                            <li>Caixas Madeira (Devolução): {val_mad} cx</li>
                         </ul>
                         <p><strong>Motorista / Placa:</strong> {motorista_forn}</p>
                         <p><strong>Obs:</strong> {obs_caix}</p>
@@ -930,18 +959,81 @@ elif modulo == "🪵 9. Gestão de Caixaria & Saída":
                 """
                 st.markdown(html_cupom_caix, unsafe_allow_html=True)
 
+    # 2. TELA DE VENDA E COMERCIALIZAÇÃO DE CAIXAS
+    with tab_venda:
+        st.subheader("💰 Comercialização & Venda Avulsa de Embalagens")
+        st.caption("Registro de venda de papelão (tomate/maçã), madeira ou paletes avulsos.")
+
+        c_v1, c_v2 = st.columns(2)
+        with c_v1:
+            comprador_nome = st.text_input("Nome do Comprador / Sucateiro / Empresa:", placeholder="Ex: Reciclagem Campinas / Comprador Ceasa...")
+            tipo_venda_emb = st.selectbox("Tipo de Embalagem Comercializada:", [
+                "📦 Papelão Descartável (Tomate / Maçã / Ovos)",
+                "🍌 Caixas de Madeira / Banana / K",
+                "🌴 Caixas Tropical Avulsas",
+                "🪵 Paletes PBR Avulsos"
+            ])
+        with c_v2:
+            qtd_venda_str = st.text_input("Quantidade Vendida (Unidades):", value="0")
+            vlr_unit_str = st.text_input("Valor Unitário (R$):", value="0.00")
+
+        qtd_venda_num = int(qtd_venda_str) if qtd_venda_str.isdigit() else 0
+        vlr_unit_num = float(vlr_unit_str.replace(",", ".")) if vlr_unit_str.replace(",", ".").replace(".", "", 1).isdigit() else 0.0
+        vlr_total_venda = qtd_venda_num * vlr_unit_num
+
+        st.markdown(f"#### 💵 **VALOR TOTAL A RECEBER:** `R$ {vlr_total_venda:,.2f}`".replace(".", "X").replace(",", ".").replace("X", ","))
+
+        obs_venda = st.text_input("Observação da Venda / Forma de Pagamento:", placeholder="Ex: Pagamento em PIX / Dinheiro no ato")
+
+        if st.button("💾 Confirmar Venda & Emitir Recibo de Saída", type="primary", use_container_width=True):
+            if not comprador_nome.strip():
+                st.warning("⚠️ Informe o nome do comprador!")
+            elif qtd_venda_num <= 0:
+                st.warning("⚠️ A quantidade vendida deve ser maior que 0!")
+            else:
+                st.success(f"✅ Venda de {qtd_venda_num} unidades para {comprador_nome} confirmada!")
+
+                st.markdown("---")
+                st.subheader("🧾 RECIBO DE COMERCIALIZAÇÃO DE EMBALAGENS")
+                if st.button("🖨️ Imprimir Recibo de Venda", type="primary"):
+                    st.components.v1.html("<script>window.print();</script>", height=0)
+
+                html_recibo_venda = f"""
+                <div style="border:2px solid #000; padding:15px; font-family:Arial, sans-serif; background-color:#fff; color:#000;">
+                    <div style="text-align:center; border-bottom:2px solid #000; padding-bottom:5px;">
+                        <h3 style="margin:0;">🌴 MÓDULO TROPICAL — RECIBO DE VENDA DE EMBALAGENS</h3>
+                        <p style="margin:0; font-size:12px;">Data: {HOJE_STR} | Expedição Caixaria</p>
+                    </div>
+                    <div style="margin-top:10px; font-size:13px;">
+                        <p><strong>Comprador / Empresa:</strong> {comprador_nome}</p>
+                        <p><strong>Tipo de Embalagem:</strong> {tipo_venda_emb}</p>
+                        <p><strong>Quantidade Vendida:</strong> {qtd_venda_num} unidades</p>
+                        <p><strong>Valor Unitário:</strong> R$ {vlr_unit_num:,.2f}</p>
+                        <p><strong>VALOR TOTAL A RECEBER:</strong> <strong>R$ {vlr_total_venda:,.2f}</strong></p>
+                        <p><strong>Forma de Pagamento / Obs:</strong> {obs_venda}</p>
+                    </div>
+                    <div style="margin-top:30px; display:flex; justify-content:space-between; font-size:11px; text-align:center;">
+                        <div>___________________________________<br>Responsável Caixaria</div>
+                        <div>___________________________________<br>Assinatura Comprador</div>
+                    </div>
+                </div>
+                """
+                st.markdown(html_recibo_venda, unsafe_allow_html=True)
+
+    # 3. EXTRATO DE SALDOS
     with tab_caix_extrato:
-        st.subheader("📊 Extrato Consolidado de Saldos")
-        forn_filtro = st.text_input("🔍 Pesquisar Fornecedor:", placeholder="Digite o nome do fornecedor...")
+        st.subheader("📊 Extrato Consolidado de Saldos & Vendas")
+        forn_filtro = st.text_input("🔍 Pesquisar Fornecedor / Comprador:", placeholder="Digite o nome para pesquisar...")
 
         dados_extrato_limpo = [
-            {"Fornecedor": "Goiaba Atibaia", "Entrada": "100 Cx Tropical", "Saída": "0 Cx", "Saldo Devedor/Credor": "Fornecedor devendo 100 Caixas"},
-            {"Fornecedor": "Produtor Batata Silva", "Entrada": "12 Paletes PBR", "Saída": "12 Paletes PBR", "Saldo Devedor/Credor": "Quitado (Troca 1:1)"}
+            {"Origem / Tipo": "Entrada Fornecedor", "Nome": "Goiaba Atibaia", "Embalagem": "Cx Tropical", "Movimento": "100 Ent / 0 Saí", "Saldo / Status": "Devendo 100 Caixas"},
+            {"Origem / Tipo": "Entrada Fornecedor", "Nome": "Banana Laranjal", "Embalagem": "Cx Madeira", "Movimento": "80 Ent / 0 Saí", "Saldo / Status": "Retenção Empresa (0 Devedor)"},
+            {"Origem / Tipo": "Venda Comercial", "Nome": "Reciclagem Campinas", "Embalagem": "Papelão Tomate", "Movimento": "Saída 300 un", "Saldo / Status": "Recebido R$ 450,00"}
         ]
         
         df_ext = pd.DataFrame(dados_extrato_limpo)
         if forn_filtro.strip():
-            df_ext = df_ext[df_ext["Fornecedor"].str.lower().str.contains(forn_filtro.strip().lower())]
+            df_ext = df_ext[df_ext["Nome"].str.lower().str.contains(forn_filtro.strip().lower())]
 
         st.dataframe(df_ext, use_container_width=True)
 
