@@ -115,7 +115,8 @@ modulo = st.sidebar.radio(
         "📱 5. Conferência Mobile & Picking",
         "🚚 6. Carregamento & Cupom de Saída",
         "📍 7. Entregas & Devolução de Caixas",
-        "📦 8. Controle de Caixas & Fornecedores",
+        "📦 8. Recebimento de Mercadoria",
+        "🪵 9. Gestão de Caixaria & Saída",
         "🗺️ Endereços das Escolas",
         "✏️ Lançamentos Avulsos"
     ]
@@ -782,67 +783,64 @@ elif modulo == "📍 7. Entregas & Devolução de Caixas":
         st.info("Nenhuma carga liberada para entrega no momento. Realize a conferência e o carregamento do veículo primeiro.")
 
 # -------------------------------------------------------------------
-# 8. CONTROLE DE CAIXAS & FORNECEDORES (RECEBIMENTO vs CAIXARIA)
+# 8. RECEBIMENTO DE MERCADORIA (ENTRADA PURA)
 # -------------------------------------------------------------------
-elif modulo == "📦 8. Controle de Caixas & Fornecedores":
-    st.header("📦 Gestão de Embalagens — Recebimento & Caixaria")
-    st.caption("Fluxo dividido: O Recebimento registra a entrada da carga e a Caixaria efetua a saída e o acerto.")
+elif modulo == "📦 8. Recebimento de Mercadoria":
+    st.header("📦 Módulo de Recebimento de Mercadoria (Doca de Entrada)")
+    st.caption("Registro de entrada de cargas e vasilhames trazidos por fornecedores.")
 
-    tab_receb, tab_caixaria, tab_extrato = st.tabs([
-        "📥 1. Recebimento de Mercadoria (Entrada)", 
-        "📤 2. Setor da Caixaria (Saída & Acerto)", 
-        "📊 3. Extrato de Conta Corrente"
-    ])
+    st.subheader("📥 Lançamento de Entrada no Galpão")
+    
+    c_r1, c_r2 = st.columns(2)
+    with c_r1:
+        origem_ent = st.selectbox("Local de Recebimento:", ["Galpão Tropical (Campinas)", "CEASA Campinas", "CEASA São Paulo (CEAGESP)"])
+        fornecedor_ent = st.text_input("Nome do Fornecedor / Produtor:", placeholder="Ex: Goiaba Atibaia / Batata Silva...")
+    with c_r2:
+        doc_ref_ent = st.text_input("Nº Nota Fiscal / Romaneio de Entrada:", placeholder="Ex: NF 10234")
+        tipo_emb_ent = st.selectbox("Tipo de Embalagem Recebida:", [
+            "Caixa Tropical (Hortifrúti)", "Palete PBR", "Caixa Louca ALTA", "Caixa Louca BAIXA", "Madeira / Banana / Grade / Tipo K"
+        ])
 
-    # 1. TELA DO RECEBIMENTO DE MERCADORIA
-    with tab_receb:
-        st.subheader("📥 Registro de Entrada de Carga no Galpão")
-        
-        c_r1, c_r2 = st.columns(2)
-        with c_r1:
-            origem_ent = st.selectbox("Local de Recebimento:", ["Galpão Tropical (Campinas)", "CEASA Campinas", "CEASA São Paulo (CEAGESP)"])
-            fornecedor_ent = st.text_input("Nome do Fornecedor / Produtor:", placeholder="Ex: Produtor Batata Silva...")
-        with c_r2:
-            doc_ref_ent = st.text_input("Nº Nota Fiscal / Romaneio de Entrada:", placeholder="Ex: NF 10234")
-            tipo_emb_ent = st.selectbox("Tipo de Embalagem Recebida:", [
-                "Caixa Tropical (Hortifrúti)", "Palete PBR", "Caixa Louca ALTA", "Caixa Louca BAIXA", "Madeira / Banana / Grade / Tipo K"
-            ])
+    qtd_ent_str = st.text_input("Quantidade de Embalagens Recebidas (Entrada):", value="0")
+    qtd_ent_num = int(qtd_ent_str) if qtd_ent_str.isdigit() else 0
+    obs_ent = st.text_input("Observações do Recebimento:", placeholder="Ex: Entrada em perfeitas condições")
 
-        qtd_ent_str = st.text_input("Quantidade de Embalagens Recebidas (Entrada):", value="0")
-        qtd_ent_num = int(qtd_ent_str) if qtd_ent_str.isdigit() else 0
-        obs_ent = st.text_input("Observações do Recebimento:", placeholder="Ex: Chegou paletizado em boas condições")
-
-        if st.button("💾 Registrar Entrada no Recebimento", type="primary", use_container_width=True):
-            if not fornecedor_ent.strip():
-                st.warning("⚠️ Informe o nome do fornecedor!")
-            elif qtd_ent_num <= 0:
-                st.warning("⚠️ A quantidade de entrada deve ser maior que 0!")
+    if st.button("💾 Registrar Entrada e Enviar para Caixaria", type="primary", use_container_width=True):
+        if not fornecedor_ent.strip():
+            st.warning("⚠️ Informe o nome do fornecedor!")
+        elif qtd_ent_num <= 0:
+            st.warning("⚠️ A quantidade de entrada deve ser maior que 0!")
+        else:
+            dado_ent = {
+                "origem": origem_ent,
+                "fornecedor": fornecedor_ent.strip(),
+                "doc_ref": doc_ref_ent.strip(),
+                "embalagem": tipo_emb_ent,
+                "qtd_entrada": qtd_ent_num,
+                "qtd_saida": 0,
+                "status": "PENDENTE_CAIXARIA",
+                "obs_entrada": obs_ent,
+                "data_registro": HOJE_STR
+            }
+            if supabase:
+                try:
+                    supabase.table("movimentacao_caixas").insert(dado_ent).execute()
+                    st.success(f"✅ Entrada de {qtd_ent_num} {tipo_emb_ent} de {fornecedor_ent} enviada para o Setor de Caixaria!")
+                except Exception as e:
+                    st.error(f"Erro ao salvar recebimento: {e}")
             else:
-                dado_ent = {
-                    "origem": origem_ent,
-                    "fornecedor": fornecedor_ent.strip(),
-                    "doc_ref": doc_ref_ent.strip(),
-                    "embalagem": tipo_emb_ent,
-                    "qtd_entrada": qtd_ent_num,
-                    "qtd_saida": 0,
-                    "status": "PENDENTE_CAIXARIA",
-                    "obs_entrada": obs_ent,
-                    "data_registro": HOJE_STR
-                }
-                if supabase:
-                    try:
-                        supabase.table("movimentacao_caixas").insert(dado_ent).execute()
-                        st.success(f"✅ Entrada de {qtd_ent_num} {tipo_emb_ent} de {fornecedor_ent} enviada para a Caixaria!")
-                    except Exception as e:
-                        st.error(f"Erro ao salvar recebimento: {e}")
-                else:
-                    st.success(f"✅ Entrada registrada localmente para {fornecedor_ent}!")
+                st.success(f"✅ Entrada registrada localmente para {fornecedor_ent}!")
 
-    # 2. TELA DO SETOR DA CAIXARIA
-    with tab_caixaria:
-        st.subheader("📤 Baixa de Vasilhames & Liberação de Saída")
-        st.caption("Selecione a entrada realizada pelo Recebimento para liberar os vasilhames e emitir o Cupom.")
+# -------------------------------------------------------------------
+# 9. GESTÃO DE CAIXARIA & SAÍDA (MÓDULO SEPARADO)
+# -------------------------------------------------------------------
+elif modulo == "🪵 9. Gestão de Caixaria & Saída":
+    st.header("🪵 Módulo de Gestão de Caixaria (Doca de Saída / Vasilhames)")
+    st.caption("Efetue a liberação de embalagens e emita o Cupom de Saída assinado.")
 
+    tab_caix_pend, tab_caix_extrato = st.tabs(["📤 Liberação de Saída por Fornecedor", "📊 Extrato Geral de Saldos"])
+
+    with tab_caix_pend:
         res_entradas = []
         if supabase:
             try:
@@ -851,90 +849,94 @@ elif modulo == "📦 8. Controle de Caixas & Fornecedores":
             except Exception:
                 res_entradas = []
 
-        # Simulação visual caso o banco esteja vazio
         if not res_entradas:
             res_entradas = [
-                {"id": 1, "fornecedor": "Produtor Batata Silva", "embalagem": "Palete PBR", "qtd_entrada": 12, "doc_ref": "NF 8840", "origem": "Galpão Tropical (Campinas)"},
-                {"id": 2, "fornecedor": "Goiaba Atibaia", "embalagem": "Caixa Tropical (Hortifrúti)", "qtd_entrada": 50, "doc_ref": "NF 9120", "origem": "CEASA Campinas"}
+                {"id": 1, "fornecedor": "Goiaba Atibaia", "embalagem": "Caixa Tropical (Hortifrúti)", "qtd_entrada": 100, "doc_ref": "NF 9120", "origem": "CEASA Campinas"},
+                {"id": 2, "fornecedor": "Produtor Batata Silva", "embalagem": "Palete PBR", "qtd_entrada": 12, "doc_ref": "NF 8840", "origem": "Galpão Tropical (Campinas)"}
             ]
 
         df_pend = pd.DataFrame(res_entradas)
 
-        if not df_pend.empty:
-            st.markdown("##### 📋 Cargas Aguardando Liberação na Caixaria:")
-            
-            item_selecionado = None
-            for idx, row in df_pend.iterrows():
-                chk = st.checkbox(
-                    f"🏢 **{row.get('fornecedor')}** | NF: `{row.get('doc_ref')}` | Entrou: **{row.get('qtd_entrada')} x {row.get('embalagem')}** ({row.get('origem')})",
-                    key=f"caix_{row.get('id')}"
-                )
-                if chk:
-                    item_selecionado = row
+        st.markdown("##### 📋 Cargas Aguardando Liberação na Caixaria:")
+        
+        item_sel = None
+        for idx, row in df_pend.iterrows():
+            lbl = f"🏢 **{row.get('fornecedor')}** | NF: `{row.get('doc_ref')}` | Entrada: **{row.get('qtd_entrada')} x {row.get('embalagem')}** ({row.get('origem')})"
+            chk = st.checkbox(lbl, key=f"chk_cx_{row.get('id')}")
+            if chk:
+                item_sel = row
 
-            if item_selecionado is not None:
-                st.write("---")
-                st.markdown(f"### ⚙️ Processar Saída para: `{item_selecionado.get('fornecedor')}`")
+        if item_sel is not None:
+            st.write("---")
+            st.markdown(f"### ⚙️ Registrar Saída de Vasilhames — `{item_sel.get('fornecedor')}`")
+            st.info(f"📥 **Carga de Entrada Registrada:** **{item_sel.get('qtd_entrada')} unidades** de **{item_sel.get('embalagem')}**.")
 
-                tipo_operacao_saida = st.selectbox(
-                    "Tipo de Liberação da Caixaria:",
-                    [
-                        "🔄 Troca com Caixa (Devolução no mesmo valor)",
-                        "📦 Saída Sem Caixa (Fornecedor leva caixa vazia devendo)",
-                        "🪵 Somente Palete (Fornecedor leva palete sem nada)",
-                        "🚫 Sem Nada (Fornecedor sai sem nenhuma embalagem)"
-                    ]
-                )
+            st.markdown("#### 📦 Quantidades Liberadas na Saída:")
 
-                c_cx_s1, c_cx_s2 = st.columns(2)
-                with c_cx_s1:
-                    qtd_sai_real_str = st.text_input("Quantidade Liberada/Devolvida na Saída:", value="0")
-                with c_cx_s2:
-                    obs_caixaria = st.text_input("Observação da Caixaria:", placeholder="Ex: Devolvido 10 caixas vazias")
+            chk_saida_zero = st.checkbox("🚫 **Saída Zero / Sem Devolução** (Motorista sai sem levar embalagens)", key="chk_zero")
 
-                qtd_sai_real = int(qtd_sai_real_str) if qtd_sai_real_str.isdigit() else 0
+            c_s1, c_s2, c_s3 = st.columns(3)
+            with c_s1:
+                qtd_sai_trop = st.text_input("Caixas Tropical Saindo:", value="0", disabled=chk_saida_zero)
+            with c_s2:
+                qtd_sai_pbr = st.text_input("Paletes PBR Saindo:", value="0", disabled=chk_saida_zero)
+            with c_s3:
+                qtd_sai_louca = st.text_input("Caixas Loucas Saindo:", value="0", disabled=chk_saida_zero)
 
-                if st.button("🚀 Processar Saída & Emitir Cupom da Caixaria", type="primary", use_container_width=True):
-                    st.success(f"✅ Saída processada na Caixaria para {item_selecionado.get('fornecedor')}!")
+            val_trop = 0 if chk_saida_zero else (int(qtd_sai_trop) if qtd_sai_trop.isdigit() else 0)
+            val_pbr = 0 if chk_saida_zero else (int(qtd_sai_pbr) if qtd_sai_pbr.isdigit() else 0)
+            val_louca = 0 if chk_saida_zero else (int(qtd_sai_louca) if qtd_sai_louca.isdigit() else 0)
 
-                    st.markdown("---")
-                    st.subheader("🧾 CUPOM DE SAÍDA — CAIXARIA")
-                    if st.button("🖨️ Imprimir Cupom de Saída", type="primary"):
-                        st.components.v1.html("<script>window.print();</script>", height=0)
+            motorista_forn = st.text_input("Nome/Placa do Motorista do Fornecedor:", placeholder="Ex: João Silva - Placa ABC-1234")
+            obs_caix = st.text_input("Observações da Caixaria:", placeholder="Ex: Saída efetuada com visto")
 
-                    html_cupom_caixaria = f"""
-                    <div style="border:2px dashed #000; padding:15px; font-family:Arial, sans-serif; background-color:#fff; color:#000;">
-                        <div style="text-align:center; border-bottom:1px solid #000; padding-bottom:5px;">
-                            <h3 style="margin:0;">🌴 MÓDULO TROPICAL — CUPOM DE SAÍDA / CAIXARIA</h3>
-                            <p style="margin:0; font-size:12px;">Data: {HOJE_STR} | Origem: {item_selecionado.get('origem')}</p>
-                        </div>
-                        <div style="margin-top:10px; font-size:13px;">
-                            <p><strong>Fornecedor:</strong> {item_selecionado.get('fornecedor')}</p>
-                            <p><strong>NF / Documento:</strong> {item_selecionado.get('doc_ref')}</p>
-                            <p><strong>Tipo de Embalagem:</strong> {item_selecionado.get('embalagem')}</p>
-                            <p><strong>Quantidade Recebida (Entrada):</strong> {item_selecionado.get('qtd_entrada')}</p>
-                            <p><strong>Quantidade Liberada (Saída):</strong> {qtd_sai_real}</p>
-                            <p><strong>Modo de Saída:</strong> {tipo_operacao_saida}</p>
-                            <p><strong>Observação Caixaria:</strong> {obs_caixaria}</p>
-                        </div>
-                        <div style="margin-top:20px; display:flex; justify-content:space-between; font-size:11px; text-align:center;">
-                            <div>___________________________________<br>Assinatura Operador Caixaria</div>
-                            <div>___________________________________<br>Assinatura Fornecedor/Motorista</div>
-                        </div>
+            # Cálculo prévio do saldo resultante
+            saldo_trop_result = (item_sel.get('qtd_entrada') if "Tropical" in item_sel.get('embalagem') else 0) - val_trop
+            saldo_pbr_result = (item_sel.get('qtd_entrada') if "Palete" in item_sel.get('embalagem') else 0) - val_pbr
+
+            if st.button("🚀 Confirmar Saída & Gerar Cupom da Caixaria", type="primary", use_container_width=True):
+                st.success(f"✅ Saída registrada com sucesso para {item_sel.get('fornecedor')}!")
+
+                st.markdown("---")
+                st.subheader("🧾 CUPOM DE SAÍDA — SETOR DE CAIXARIA")
+                if st.button("🖨️ Imprimir Cupom de Saída", type="primary"):
+                    st.components.v1.html("<script>window.print();</script>", height=0)
+
+                html_cupom_caix = f"""
+                <div style="border:2px dashed #000; padding:15px; font-family:Arial, sans-serif; background-color:#fff; color:#000;">
+                    <div style="text-align:center; border-bottom:1px solid #000; padding-bottom:5px;">
+                        <h3 style="margin:0;">🌴 MÓDULO TROPICAL — CUPOM DE SAÍDA DE EMBALAGENS</h3>
+                        <p style="margin:0; font-size:12px;">Data: {HOJE_STR} | Origem: {item_sel.get('origem')}</p>
                     </div>
-                    """
-                    st.markdown(html_cupom_caixaria, unsafe_allow_html=True)
-        else:
-            st.info("Nenhuma entrada pendente de baixa na Caixaria neste momento.")
+                    <div style="margin-top:10px; font-size:13px;">
+                        <p><strong>Fornecedor:</strong> {item_sel.get('fornecedor')}</p>
+                        <p><strong>NF / Documento:</strong> {item_sel.get('doc_ref')}</p>
+                        <p><strong>Entrada Recebida:</strong> {item_sel.get('qtd_entrada')} x {item_sel.get('embalagem')}</p>
+                        <hr style="border:0.5px solid #ccc;">
+                        <p><strong>SAÍDA LIBERADA:</strong></p>
+                        <ul>
+                            <li>Caixas Tropical: {val_trop} cx</li>
+                            <li>Paletes PBR: {val_pbr} un</li>
+                            <li>Caixas Loucas: {val_louca} cx</li>
+                        </ul>
+                        <p><strong>Motorista / Placa:</strong> {motorista_forn}</p>
+                        <p><strong>Obs:</strong> {obs_caix}</p>
+                    </div>
+                    <div style="margin-top:30px; display:flex; justify-content:space-between; font-size:11px; text-align:center;">
+                        <div>___________________________________<br>Visto Operador Caixaria</div>
+                        <div>___________________________________<br>Visto / Assinatura Motorista</div>
+                    </div>
+                </div>
+                """
+                st.markdown(html_cupom_caix, unsafe_allow_html=True)
 
-    # 3. TELA DO EXTRATO
-    with tab_extrato:
-        st.subheader("📊 Extrato de Conta Corrente por Fornecedor")
-        forn_filtro = st.text_input("🔍 Filtrar por Nome do Fornecedor:", placeholder="Digite o nome do fornecedor para pesquisar...")
+    with tab_caix_extrato:
+        st.subheader("📊 Extrato Consolidado de Saldos")
+        forn_filtro = st.text_input("🔍 Pesquisar Fornecedor:", placeholder="Digite o nome do fornecedor...")
 
         dados_extrato_limpo = [
-            {"Fornecedor": "Produtor Batata Silva", "Embalagem": "Palete PBR", "Entrada": 12, "Saída": 0, "Saldo": "Devendo 12 Paletes"},
-            {"Fornecedor": "Goiaba Atibaia", "Embalagem": "Caixa Tropical", "Entrada": 50, "Saída": 50, "Saldo": "Quitado (Troca 1:1)"}
+            {"Fornecedor": "Goiaba Atibaia", "Entrada": "100 Cx Tropical", "Saída": "0 Cx", "Saldo Devedor/Credor": "Fornecedor devendo 100 Caixas"},
+            {"Fornecedor": "Produtor Batata Silva", "Entrada": "12 Paletes PBR", "Saída": "12 Paletes PBR", "Saldo Devedor/Credor": "Quitado (Troca 1:1)"}
         ]
         
         df_ext = pd.DataFrame(dados_extrato_limpo)
