@@ -2,11 +2,13 @@ import streamlit as st
 import pandas as pd
 import requests
 import math
+from datetime import datetime
 from supabase import create_client, Client
 
 st.set_page_config(page_title="Módulo Tropical - Sistema de Expedição", layout="wide", page_icon="🌴")
 
 ENDERECO_GALPAO = "Av. Comendador Aladino Selmi, 4840 - Vila San Martin, Campinas - SP, 13069-096"
+HOJE_STR = datetime.now().strftime("%Y-%m-%d")
 
 st.markdown("""
 <style>
@@ -28,6 +30,21 @@ st.markdown("""
     .card-verde {
         background-color: #1e8449;
         border: 2px solid #27ae60;
+        border-radius: 10px;
+        padding: 12px 4px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        margin-bottom: 10px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        text-align: center;
+        min-height: 95px;
+        width: 100%;
+    }
+    .card-azul {
+        background-color: #2980b9;
+        border: 2px solid #3498db;
         border-radius: 10px;
         padding: 12px 4px;
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
@@ -84,7 +101,8 @@ st.sidebar.markdown("### Navegação do Módulo Tropical")
 modulo = st.sidebar.radio(
     "",
     [
-        "📋 Separação do Dia",
+        "📲 Coletor / Terminal de Bipagem",
+        "📋 Separação do Dia (ERP)",
         "🚚 Carregamento & Rotas",
         "🔮 Previsão de IA",
         "🗺️ Endereços das Escolas",
@@ -140,7 +158,6 @@ def exibir_metricas_detalhadas(df, col_qtd, col_uni, col_rota, col_empresa, col_
     c6.markdown(f'<div class="card-laranja"><div class="card-titulo">Ovos (BJ)</div><div class="card-valor">{fmt_br_int(bj_total)} bj</div></div>', unsafe_allow_html=True)
     c7.markdown(f'<div class="card-laranja"><div class="card-titulo">Outros</div><div class="card-valor">{fmt_br_int(outros_total)} vol</div></div>', unsafe_allow_html=True)
 
-    # --- ESTIMATIVA DE CAIXAS ---
     st.markdown("##### 📦 Estimativa de Caixas e Embalagens de Separação")
     
     cx_pvc_fechadas = int(bj_pvc // 10)
@@ -161,10 +178,109 @@ def exibir_metricas_detalhadas(df, col_qtd, col_uni, col_rota, col_empresa, col_
     k6.markdown(f'<div class="card-verde"><div class="card-titulo">Total de Caixas</div><div class="card-valor">{fmt_br_int(cx_total_geral)} cx</div></div>', unsafe_allow_html=True)
 
 # -------------------------------------------------------------------
-# 1. SEPARAÇÃO DO DIA
+# 0. COLETOR / TERMINAL DE BIPAGEM MULTI-OPERAÇÃO
 # -------------------------------------------------------------------
-if modulo == "📋 Separação do Dia":
-    st.header("📋 Base de Separação Diária do Galpão")
+if modulo == "📲 Coletor / Terminal de Bipagem":
+    st.header("📲 Coletor de Separação (Terminal do Galpão)")
+    st.caption("Compatível com leitor de código de barras ou digitação de fichas/NUMREQ.")
+
+    # Busca bipagens de hoje no Supabase
+    bipagens_hoje = []
+    if supabase:
+        try:
+            res = supabase.table("separacao").select("*").eq("data_registro", HOJE_STR).execute()
+            bipagens_hoje = res.data if res.data else []
+        except Exception:
+            bipagens_hoje = []
+
+    df_bip = pd.DataFrame(bipagens_hoje) if bipagens_hoje else pd.DataFrame(columns=["numreq", "operador", "origem", "data_registro"])
+
+    # Contadores por Operação
+    cnt_erp = len(df_bip[df_bip["origem"] == "Base ERP (Escolas)"]) if "origem" in df_bip.columns else len(df_bip)
+    cnt_campinas = len(df_bip[df_bip["origem"] == "Campinas"]) if "origem" in df_bip.columns else 0
+    cnt_estado = len(df_bip[df_bip["origem"] == "Estado"]) if "origem" in df_bip.columns else 0
+    cnt_confruty = len(df_bip[df_bip["origem"] == "Confruty"]) if "origem" in df_bip.columns else 0
+    cnt_vinhedo = len(df_bip[df_bip["origem"] == "Vinhedo"]) if "origem" in df_bip.columns else 0
+
+    st.markdown("##### 📊 Bipagens Realizadas Hoje por Operação")
+    o1, o2, o3, o4, o5 = st.columns(5)
+    o1.markdown(f'<div class="card-laranja"><div class="card-titulo">Base ERP (Escolas)</div><div class="card-valor">{cnt_erp} bipagens</div></div>', unsafe_allow_html=True)
+    o2.markdown(f'<div class="card-azul"><div class="card-titulo">Campinas</div><div class="card-valor">{cnt_campinas} bipagens</div></div>', unsafe_allow_html=True)
+    o3.markdown(f'<div class="card-azul"><div class="card-titulo">Estado</div><div class="card-valor">{cnt_estado} bipagens</div></div>', unsafe_allow_html=True)
+    o4.markdown(f'<div class="card-azul"><div class="card-titulo">Confruty</div><div class="card-valor">{cnt_confruty} bipagens</div></div>', unsafe_allow_html=True)
+    o5.markdown(f'<div class="card-azul"><div class="card-titulo">Vinhedo</div><div class="card-valor">{cnt_vinhedo} bipagens</div></div>', unsafe_allow_html=True)
+
+    st.write("---")
+
+    col_esq, col_dir = st.columns([1.2, 1])
+
+    with col_esq:
+        st.subheader("📝 Bipagem em Lote")
+        
+        operacao_sel = st.selectbox(
+            "1. Selecione a Origem da Separação:",
+            ["Base ERP (Escolas)", "Campinas", "Estado", "Confruty", "Vinhedo"]
+        )
+        
+        operador_cod = st.text_input("2. Código / Crachá do Separador:")
+
+        fichas_raw = st.text_area(
+            "3. Bipe ou digite as Fichas / NUMREQ (uma por linha):",
+            height=140,
+            placeholder="Bipe a 1ª ficha...\nBipe a 2ª ficha...\nBipe a 3ª ficha..."
+        )
+
+        if st.button("🚀 Confirmar Bipagens", type="primary", use_container_width=True):
+            if not operador_cod or not fichas_raw.strip():
+                st.warning("⚠️ Informe o código do separador e bipe ao menos uma ficha!")
+            else:
+                lista_fichas = [f.strip() for f in fichas_raw.strip().split("\n") if f.strip()]
+                ja_bipados = {str(b.get("numreq")).strip() for b in bipagens_hoje}
+
+                novos_registros = []
+                duplicados = []
+
+                for req in lista_fichas:
+                    req_str = str(req).strip()
+                    if req_str in ja_bipados:
+                        duplicados.append(req_str)
+                    else:
+                        novos_registros.append({
+                            "numreq": req_str,
+                            "operador": operador_cod.strip(),
+                            "origem": operacao_sel,
+                            "data_registro": HOJE_STR
+                        })
+                        ja_bipados.add(req_str)
+
+                if novos_registros:
+                    if supabase:
+                        try:
+                            supabase.table("separacao").insert(novos_registros).execute()
+                            st.success(f"✅ {len(novos_registros)} pedido(s) registrado(s) para {operador_cod} na operação [{operacao_sel}]!")
+                        except Exception as e:
+                            st.error(f"Erro ao salvar no banco: {e}")
+                    else:
+                        st.success(f"✅ {len(novos_registros)} pedido(s) processados na memória local!")
+
+                if duplicados:
+                    st.error(f"⚠️ Os seguintes pedidos já haviam sido bipados hoje e foram ignorados: {', '.join(duplicados)}")
+
+                st.rerun()
+
+    with col_dir:
+        st.subheader("📋 Últimas Bipagens Registradas")
+        if not df_bip.empty:
+            cols_exib = [c for c in ["numreq", "operador", "origem"] if c in df_bip.columns]
+            st.dataframe(df_bip[cols_exib].iloc[::-1].head(12), use_container_width=True)
+        else:
+            st.info("Nenhuma bipagem registrada hoje ainda.")
+
+# -------------------------------------------------------------------
+# 1. SEPARAÇÃO DO DIA (ERP)
+# -------------------------------------------------------------------
+elif modulo == "📋 Separação do Dia (ERP)":
+    st.header("📋 Base de Separação Diária do Galpão (ERP)")
     uploaded_file = st.file_uploader("Suba a planilha do dia (Base0608.xlsx / Pré-venda)", type=["csv", "xlsx"])
     
     if uploaded_file is not None:
@@ -316,14 +432,14 @@ elif modulo == "🚚 Carregamento & Rotas":
         else:
             st.warning("A coluna 'TRP_FANTASIA' não foi localizada na planilha enviada.")
     else:
-        st.info("💡 Para visualizar as rotas e cargas por veículo, primeiro suba a planilha em '📋 Separação do Dia'.")
+        st.info("💡 Para visualizar as rotas e cargas por veículo, primeiro suba a planilha em '📋 Separação do Dia (ERP)'.")
 
 # -------------------------------------------------------------------
-# 3. PREVISÃO DE IA BASEADA NA OPERAÇÃO REAL
+# 3. PREVISÃO DE IA
 # -------------------------------------------------------------------
 elif modulo == "🔮 Previsão de IA":
     st.header("🔮 Previsão de Produtividade & Dimensionamento de Galpão")
-    st.caption("Cálculo calibrated com base na produtividade real da equipe (1.110 caixas em ~2h com 41 separadores).")
+    st.caption("Cálculo calibrado com base na produtividade real da equipe (1.110 caixas em ~2h com 41 separadores).")
 
     df_base = None
     if 'df_separacao' in st.session_state and st.session_state['df_separacao'] is not None:
@@ -342,7 +458,6 @@ elif modulo == "🔮 Previsão de IA":
         st.subheader("👥 Controle de Faltas e Dimensionamento do Turno")
         qtd_separadores = st.slider("Selecione a quantidade de separadores PRESENTES no turno hoje:", min_value=1, max_value=50, value=41)
 
-        # Média real do galpão: cada separador produz ~13.54 caixas/hora
         CADENCIA_POR_SEPARADOR = 13.5365
         produtividade_equipe_cxh = qtd_separadores * CADENCIA_POR_SEPARADOR
 
@@ -368,7 +483,7 @@ elif modulo == "🔮 Previsão de IA":
                 st.success(f"Com equipe reforçada ({qtd_separadores} pessoas), a carga será concluída em **{horas_exatas}h {minutos_exatos}min**!")
 
     else:
-        st.warning("💡 Por favor, primeiro suba a planilha na aba '📋 Separação do Dia' para carregar os volumes da carga.")
+        st.warning("💡 Por favor, primeiro suba a planilha na aba '📋 Separação do Dia (ERP)' para carregar os volumes da carga.")
 
 # -------------------------------------------------------------------
 # 4. ENDEREÇOS DAS ESCOLAS
