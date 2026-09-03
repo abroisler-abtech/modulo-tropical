@@ -179,7 +179,7 @@ def exibir_metricas_detalhadas(df, col_qtd, col_uni, col_rota, col_empresa, col_
     k6.markdown(f'<div class="card-verde"><div class="card-titulo">Total de Caixas</div><div class="card-valor">{fmt_br_int(cx_total_geral)} cx</div></div>', unsafe_allow_html=True)
 
 # -------------------------------------------------------------------
-# NOVO MÓDULO: CONFERÊNCIA MOBILE & PICKING DE CARREGAMENTO
+# MÓDULO: CONFERÊNCIA MOBILE & PICKING DE CARREGAMENTO
 # -------------------------------------------------------------------
 if modulo == "📱 Conferência Mobile & Picking":
     st.header("📱 Módulo de Conferência Mobile & Picking")
@@ -202,10 +202,14 @@ if modulo == "📱 Conferência Mobile & Picking":
             st.subheader("🔍 Localizar Pedido para Conferência")
             cod_bipado = st.text_input("Bipe o código do ticket / NUMREQ ou selecione abaixo:", placeholder="Aguardando bipagem do ticket...")
 
-            lista_pedidos_opt = sorted(df_base[col_req].astype(str).unique().tolist())
+            lista_pedidos_opt = ["-- Selecione o Pedido --"] + sorted(df_base[col_req].astype(str).unique().tolist())
             
-            # Auto seleciona se for bipado
-            ped_selecionado = cod_bipado.strip() if cod_bipado.strip() in lista_pedidos_opt else st.selectbox("Ou selecione o Pedido:", lista_pedidos_opt)
+            # Ajuste: Iniciar em branco e carregar quando selecionado ou bipado
+            if cod_bipado.strip() in lista_pedidos_opt:
+                ped_selecionado = cod_bipado.strip()
+            else:
+                sel = st.selectbox("Ou selecione o Pedido:", lista_pedidos_opt, index=0)
+                ped_selecionado = sel if sel != "-- Selecione o Pedido --" else None
 
             if ped_selecionado:
                 df_ped = df_base[df_base[col_req].astype(str) == str(ped_selecionado)]
@@ -225,16 +229,25 @@ if modulo == "📱 Conferência Mobile & Picking":
                     if not check:
                         todas_checadas = False
 
-                st.markdown("---")
-                st.markdown("#### 📦 Quantidade de Embalagens Enviadas")
+                # --- CÁLCULO AUTOMÁTICO DE OVOS DO PEDIDO SELECIONADO ---
+                kg_p, un_p, bj_p, out_p, cx_tot_p, bj_pvc_p, bj_com_p, cx_kg_p, cx_un_p, cx_out_p = calcular_resumo_caixas(df_ped, col_qtd, col_uni, col_prod)
                 
+                cx_ovos_sugerida = math.ceil(bj_pvc_p / 10.0) + math.ceil(bj_com_p / 12.0)
+                cx_tropical_sugerida = cx_kg_p + cx_un_p + cx_out_p
+
+                st.markdown("---")
+                st.markdown("#### 📦 Quantidade de Embalagens Encontradas")
+                
+                if bj_p > 0:
+                    st.info(f"🥚 **Detalhamento de Ovos no Pedido:** {int(bj_pvc_p)} bdj PVC + {int(bj_com_p)} bdj Comum (Calculado: **{cx_ovos_sugerida} cx**) ")
+
                 c_cx1, c_cx2 = st.columns(2)
                 with c_cx1:
-                    qtd_tropical = st.number_input("Caixas Tropical (Hortifrúti):", min_value=0, value=1, step=1)
+                    qtd_tropical = st.number_input("Caixas Tropical (Hortifrúti):", min_value=0, value=int(cx_tropical_sugerida), step=1)
                 with c_cx2:
-                    qtd_ovos = st.number_input("Caixas / Bandejas de Ovos:", min_value=0, value=0, step=1)
+                    qtd_ovos = st.number_input("Caixas / Bandejas de Ovos:", min_value=0, value=int(cx_ovos_sugerida), step=1)
 
-                conferente_nome = st.text_input("Nome / Crachá do Conferente:", value="Conferente 01")
+                conferente_nome = st.session_state.get('usuario_ativo', 'Conferente 01')
 
                 if st.button("✅ Finalizar & Aprovar Pedido", type="primary", use_container_width=True):
                     if not todas_checadas:
@@ -261,6 +274,8 @@ if modulo == "📱 Conferência Mobile & Picking":
                         st.success(f"✅ Pedido {ped_selecionado} aprovado localmente!")
 
                     st.balloons()
+            else:
+                st.info("👆 Por favor, bipe o ticket ou selecione um pedido para abrir o checklist.")
         else:
             st.warning("💡 Por favor, primeiro suba a planilha na aba '📋 Separação do Dia (ERP)' para ativar a conferência.")
 
@@ -268,7 +283,6 @@ if modulo == "📱 Conferência Mobile & Picking":
     with tab_conf_super:
         st.subheader("📊 Monitoramento de Conferência da Doca & Liberação de Picking")
         
-        # Puxa conferências de hoje do Supabase
         res_conf = []
         if supabase:
             try:
@@ -290,7 +304,6 @@ if modulo == "📱 Conferência Mobile & Picking":
                 df_pedidos_rota = df_base[df_base[col_rota] == rota_sel_picking]
                 total_pedidos_rota = df_pedidos_rota[col_req].nunique()
                 
-                # Pedidos já conferidos da rota
                 pedidos_conf_rota = df_conf[df_conf["rota"] == rota_sel_picking] if not df_conf.empty else pd.DataFrame()
                 qtd_conf_rota = pedidos_conf_rota["numreq"].nunique() if not pedidos_conf_rota.empty else 0
 
@@ -321,7 +334,6 @@ if modulo == "📱 Conferência Mobile & Picking":
                     st.markdown("##### 🏢 Empresas e Caixas do Veículo")
                     st.dataframe(pedidos_conf_rota[["numreq", "cliente", "caixas_tropical", "caixas_ovos", "conferente"]], use_container_width=True)
 
-                    # Simulação do Código de Barras Geral da Rota
                     cod_barras_rota = f"PICKING-{HOJE_STR.replace('-','')}-{rota_sel_picking.replace(' ','')}"
                     st.success(f"🎟️ **CÓDIGO DE BARRAS GERAL DE CARREGAMENTO (PICKING):** `{cod_barras_rota}`")
                 else:
@@ -636,9 +648,9 @@ elif modulo == "🔮 Previsão de IA":
         else:
             faltas = 41 - qtd_separadores
             if faltas > 0:
-                st.warning(f"⚠️ Com **{faltas} falta(s)** registrada(s) ({qtd_separadores} presentes), o tempo total de separação subirá para **{horas_exatas}h {minutos_exatos}min**.")
+                st.warning(f"⚠️ Com **{faltas} falta(s)** registrada(s) ({qtd_separadores} presentes), o tempo total de separação subirá para **{horas_exatas}h {minutos_exatas}min**.")
             else:
-                st.success(f"Com equipe reforçada ({qtd_separadores} pessoas), a carga será concluída em **{horas_exatas}h {minutos_exatas}min**!")
+                st.success(f"Com equipe reforçada ({qtd_separadores} pessoas), a carga será concluída em **{horas_exatas}h {minutos_exatos}min**!")
 
     else:
         st.warning("💡 Por favor, primeiro suba a planilha na aba '📋 Separação do Dia (ERP)' para carregar os volumes da carga.")
