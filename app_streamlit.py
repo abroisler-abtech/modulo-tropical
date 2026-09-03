@@ -506,7 +506,7 @@ elif modulo == "📱 5. Conferência Mobile & Picking":
 
                 c_cx1, c_cx2 = st.columns(2)
                 with c_cx1:
-                    qtd_tropical = st.number_input("Caixas Tropical (Hortifrúti):", min_value=0, value=0, step=1)
+                    qtd_tropical = st.text_input("Caixas Tropical (Hortifrúti):", value="0")
                 with c_cx2:
                     st.text_input("Ovos no Pedido (Fechado/Regra):", value=txt_ovos_blindado, disabled=True)
 
@@ -520,7 +520,7 @@ elif modulo == "📱 5. Conferência Mobile & Picking":
                         "numreq": str(ped_selecionado),
                         "cliente": str(nome_cliente),
                         "rota": str(nome_rota),
-                        "caixas_tropical": int(qtd_tropical),
+                        "caixas_tropical": int(qtd_tropical) if qtd_tropical.isdigit() else 0,
                         "caixas_ovos": vol_ovos_num,
                         "desc_ovos": str(txt_ovos_blindado),
                         "conferente": str(conferente_nome),
@@ -707,7 +707,7 @@ elif modulo == "🚚 6. Carregamento & Cupom de Saída":
             st.info("Nenhuma conferência finalizada encontrada para a data de hoje.")
 
 # -------------------------------------------------------------------
-# 7. ENTREGAS & DEVOLUÇÃO DE CAIXAS (CELULAR DO AGREGADO COM ALERTAS)
+# 7. ENTREGAS & DEVOLUÇÃO DE CAIXAS
 # -------------------------------------------------------------------
 elif modulo == "📍 7. Entregas & Devolução de Caixas":
     st.header("📍 Módulo de Entrega no Cliente & Controle de Vasilhames")
@@ -730,8 +730,7 @@ elif modulo == "📍 7. Entregas & Devolução de Caixas":
             cliente_nome = row.get('cliente')
             cx_entregar_hoje = int(row.get('caixas_tropical', 0))
 
-            # Simulação do Saldo Devedor Histórico da Unidade no Supabase
-            saldo_devedor_anterior = 15 if idx % 2 == 0 else 0  # Exemplo visual dinâmico
+            saldo_devedor_anterior = 15 if idx % 2 == 0 else 0
             meta_recolhimento = cx_entregar_hoje + saldo_devedor_anterior
 
             with st.expander(f"📍 Parada {idx+1}: {cliente_nome} — Pedido `{row.get('numreq')}`"):
@@ -739,7 +738,6 @@ elif modulo == "📍 7. Entregas & Devolução de Caixas":
                 st.write(f"📦 **Caixas Tropical a Entregar Hoje:** **{cx_entregar_hoje} cx**")
                 st.write(f"🥚 **Ovos:** {row.get('desc_ovos')}")
 
-                # --- CARD ALERTA DE SALDO DEVEDOR DO PONTO ---
                 if saldo_devedor_anterior > 0:
                     st.warning(f"⚠️ **ALERTA DE VASILHAME NA UNIDADE:** Esta escola possui **{saldo_devedor_anterior} Caixas Tropical** pendentes de entregas anteriores!\n\n🎯 **META DE RECOLHIMENTO HOJE:** **{meta_recolhimento} Caixas Tropical** (Para zerar o ponto).")
                 else:
@@ -749,9 +747,12 @@ elif modulo == "📍 7. Entregas & Devolução de Caixas":
                 st.markdown("#### 🔄 Acerto de Vasilhame no Ato da Entrega")
                 c_ent1, c_ent2 = st.columns(2)
                 with c_ent1:
-                    cx_deixadas = st.number_input(f"Caixas Tropical Deixadas Hoje:", min_value=0, value=cx_entregar_hoje, key=f"deix_{idx}")
+                    cx_deixadas_str = st.text_input(f"Caixas Tropical Deixadas Hoje:", value=str(cx_entregar_hoje), key=f"deix_{idx}")
                 with c_ent2:
-                    cx_retiradas = st.number_input(f"Caixas Tropical Retiradas (Vazias):", min_value=0, value=0, key=f"ret_{idx}")
+                    cx_retiradas_str = st.text_input(f"Caixas Tropical Retiradas (Vazias):", value="0", key=f"ret_{idx}")
+
+                cx_deixadas = int(cx_deixadas_str) if cx_deixadas_str.isdigit() else 0
+                cx_retiradas = int(cx_retiradas_str) if cx_retiradas_str.isdigit() else 0
 
                 novo_saldo_calc = saldo_devedor_anterior + cx_deixadas - cx_retiradas
                 st.info(f"📊 **Novo Saldo de Caixas da Escola após esta Entrega:** **{novo_saldo_calc} Caixas Tropical**")
@@ -762,9 +763,9 @@ elif modulo == "📍 7. Entregas & Devolução de Caixas":
                     dados_baixa = {
                         "numreq": row.get('numreq'),
                         "cliente": cliente_nome,
-                        "caixas_deixadas": int(cx_deixadas),
-                        "caixas_retiradas": int(cx_retiradas),
-                        "saldo_resultante": int(novo_saldo_calc),
+                        "caixas_deixadas": cx_deixadas,
+                        "caixas_retiradas": cx_retiradas,
+                        "saldo_resultante": novo_saldo_calc,
                         "obs": obs_entrega,
                         "data_registro": HOJE_STR,
                         "status": "ENTREGUE"
@@ -781,100 +782,108 @@ elif modulo == "📍 7. Entregas & Devolução de Caixas":
         st.info("Nenhuma carga liberada para entrega no momento. Realize a conferência e o carregamento do veículo primeiro.")
 
 # -------------------------------------------------------------------
-# 8. CONTROLE DE CAIXAS & FORNECEDORES (ENTRADA / SAÍDA / SALDO)
+# 8. CONTROLE DE CAIXAS & FORNECEDORES (VERSÃO SIMPLIFICADA E LIMPA)
 # -------------------------------------------------------------------
 elif modulo == "📦 8. Controle de Caixas & Fornecedores":
-    st.header("📦 Gestão de Embalagens e Conta Corrente com Fornecedores")
-    st.caption("Registro simultâneo de Entradas e Saídas no ato do recebimento (Galpão, CEASA Campinas e CEASA SP).")
+    st.header("📦 Gestão de Embalagens e Conta Corrente de Fornecedores")
+    st.caption("Registro simples e direto de movimentação de embalagens por fornecedor.")
 
-    tab_mov, tab_extrato = st.tabs(["📋 Registrar Movimentação (Entrada/Saída)", "📊 Extrato de Conta Corrente"])
+    tab_mov, tab_extrato = st.tabs(["📋 Registrar Movimentação", "📊 Extrato de Conta Corrente"])
 
     with tab_mov:
-        st.subheader("📥📤 Lançamento de Vasilhames & Embalagens")
+        st.subheader("📝 Lançamento de Entrada e Saída")
         
         c_orig1, c_orig2 = st.columns(2)
         with c_orig1:
-            origem_mov = st.selectbox("Local / Origem da Operação:", ["Galpão Tropical (Campinas)", "CEASA Campinas", "CEASA São Paulo (CEAGESP)"])
+            origem_mov = st.selectbox("Local / Origem:", ["Galpão Tropical (Campinas)", "CEASA Campinas", "CEASA São Paulo (CEAGESP)"])
         with c_orig2:
             fornecedor_nome = st.text_input("Nome do Fornecedor / Produtor:", placeholder="Ex: Produtor Batata / Ceasa SP...")
 
-        doc_ref = st.text_input("Nº Nota Fiscal / Romaneio de Controle:", placeholder="Ex: NF 12345")
+        doc_ref = st.text_input("Nº Nota Fiscal / Romaneio:", placeholder="Ex: NF 12345")
 
-        st.markdown("#### 📦 Quantidades Movimentadas (No mesmo ato):")
-        
-        m_col1, m_col2, m_col3 = st.columns([2, 1, 1])
-        m_col1.markdown("**Tipo de Embalagem**")
-        m_col2.markdown("**ENTRADA (Chegando)**")
-        m_col3.markdown("**SAÍDA (Levando)**")
+        st.markdown("---")
+        c_emb1, c_emb2, c_emb3 = st.columns(3)
+        with c_emb1:
+            tipo_embalagem = st.selectbox(
+                "Tipo de Embalagem:",
+                ["Caixa Tropical (Hortifrúti)", "Palete PBR", "Caixa Louca ALTA", "Caixa Louca BAIXA", "Madeira / Banana / Grade / Tipo K"]
+            )
+        with c_emb2:
+            qtd_entrada_str = st.text_input("Quantidade ENTRADA (Chegando):", value="0")
+        with c_emb3:
+            qtd_saida_str = st.text_input("Quantidade SAÍDA (Levando):", value="0")
 
-        # 1. Caixa Tropical
-        c_t1, c_t2, c_t3 = st.columns([2, 1, 1])
-        c_t1.write("🌴 **Caixa Tropical (Hortifrúti)**")
-        ent_trop = c_t2.number_input("Entrada Tropical", min_value=0, value=0, key="ent_trop")
-        sai_trop = c_t3.number_input("Saída Tropical", min_value=0, value=0, key="sai_trop")
+        qtd_ent = int(qtd_entrada_str) if qtd_entrada_str.isdigit() else 0
+        qtd_sai = int(qtd_saida_str) if qtd_saida_str.isdigit() else 0
 
-        # 2. Palete PBR
-        c_p1, c_p2, c_p3 = st.columns([2, 1, 1])
-        c_p1.write("🪵 **Palete PBR**")
-        ent_pbr = c_p2.number_input("Entrada PBR", min_value=0, value=0, key="ent_pbr")
-        sai_pbr = c_p3.number_input("Saída PBR", min_value=0, value=0, key="sai_pbr")
+        obs_mov = st.text_input("Observações:", placeholder="Ex: Devolução de paletes / Troca direta")
 
-        # 3. Caixa Louca ALTA
-        c_l1, c_l2, c_l3 = st.columns([2, 1, 1])
-        c_l1.write("📦 **Caixa Louca ALTA (Terceiros)**")
-        ent_l_alta = c_l2.number_input("Entrada Louca Alta", min_value=0, value=0, key="ent_l_alta")
-        sai_l_alta = c_l3.number_input("Saída Louca Alta", min_value=0, value=0, key="sai_l_alta")
-
-        # 4. Caixa Louca BAIXA
-        c_lb1, c_lb2, c_lb3 = st.columns([2, 1, 1])
-        c_lb1.write("📦 **Caixa Louca BAIXA (Terceiros)**")
-        ent_l_baixa = c_lb2.number_input("Entrada Louca Baixa", min_value=0, value=0, key="ent_l_baixa")
-        sai_l_baixa = c_lb3.number_input("Saída Louca Baixa", min_value=0, value=0, key="sai_l_baixa")
-
-        # 5. Caixas Descartáveis / Madeira / Banana
-        c_m1, c_m2, c_m3 = st.columns([2, 1, 1])
-        c_m1.write("🍌 **Madeira / Grade / Banana / Tipo K (Descartável)**")
-        ent_mad = c_m2.number_input("Entrada Descartável", min_value=0, value=0, key="ent_mad")
-        c_m3.caption("Sem saldo de cobrança")
-
-        obs_mov = st.text_input("Observações / Motivo:", placeholder="Ex: Troca 1:1 de Tropical / Devolução de paletes")
-
-        if st.button("💾 Confirmar Movimentação & Atualizar Saldo", type="primary", use_container_width=True):
+        if st.button("💾 Salvar Registro e Atualizar Saldo", type="primary", use_container_width=True):
             if not fornecedor_nome.strip():
-                st.warning("⚠️ Informe o nome do fornecedor!")
+                st.warning("⚠️ Digite o nome do fornecedor!")
             else:
                 registro_mov = {
                     "origem": origem_mov,
                     "fornecedor": fornecedor_nome.strip(),
                     "doc_ref": doc_ref.strip(),
-                    "cx_tropical_ent": ent_trop, "cx_tropical_sai": sai_trop,
-                    "palete_pbr_ent": ent_pbr, "palete_pbr_sai": sai_pbr,
-                    "louca_alta_ent": ent_l_alta, "louca_alta_sai": sai_l_alta,
-                    "louca_baixa_ent": ent_l_baixa, "louca_baixa_sai": sai_l_baixa,
-                    "descartavel_ent": ent_mad,
+                    "embalagem": tipo_embalagem,
+                    "qtd_entrada": qtd_ent,
+                    "qtd_saida": qtd_sai,
                     "obs": obs_mov,
                     "data_registro": HOJE_STR
                 }
                 if supabase:
                     try:
                         supabase.table("movimentacao_caixas").insert(registro_mov).execute()
-                        st.success(f"✅ Movimentação com {fornecedor_nome} registrada com sucesso!")
+                        st.success(f"✅ Movimentação registrada com sucesso para {fornecedor_nome}!")
                     except Exception as e:
-                        st.error(f"Erro ao salvar no banco: {e}")
+                        st.error(f"Erro ao salvar: {e}")
                 else:
-                    st.success(f"✅ Movimentação com {fornecedor_nome} registrada na memória local!")
+                    st.success(f"✅ Movimentação registrada localmente para {fornecedor_nome}!")
+
+                # Se houver quantidade de saída, habilita a emissão do cupom
+                if qtd_sai > 0:
+                    st.markdown("---")
+                    st.subheader("🧾 CUPOM DE SAÍDA / COMPROVANTE DE EMBALAGENS")
+                    if st.button("🖨️ Imprimir Cupom de Saída", type="primary"):
+                        st.components.v1.html("<script>window.print();</script>", height=0)
+
+                    html_cupom_forn = f"""
+                    <div style="border:2px dashed #000; padding:15px; font-family:Arial, sans-serif; background-color:#fff; color:#000;">
+                        <div style="text-align:center; border-bottom:1px solid #000; padding-bottom:5px;">
+                            <h3 style="margin:0;">🌴 MÓDULO TROPICAL — COMPROVANTE DE EMBALAGENS</h3>
+                            <p style="margin:0; font-size:12px;">Data: {HOJE_STR} | Origem: {origem_mov}</p>
+                        </div>
+                        <div style="margin-top:10px; font-size:13px;">
+                            <p><strong>Fornecedor / Produtor:</strong> {fornecedor_nome.strip()}</p>
+                            <p><strong>Embalagem:</strong> {tipo_embalagem}</p>
+                            <p><strong>Entrada:</strong> {qtd_ent} | <strong>Saída (Retirado):</strong> {qtd_sai}</p>
+                            <p><strong>Documento de Ref:</strong> {doc_ref.strip()}</p>
+                        </div>
+                        <div style="margin-top:20px; display:flex; justify-content:space-between; font-size:11px; text-align:center;">
+                            <div>___________________________________<br>Assinatura Conferencia Galpão</div>
+                            <div>___________________________________<br>Assinatura Fornecedor/Motorista</div>
+                        </div>
+                    </div>
+                    """
+                    st.markdown(html_cupom_forn, unsafe_allow_html=True)
 
     with tab_extrato:
-        st.subheader("📊 Conta Corrente de Embalagens por Fornecedor")
-        st.info("O saldo calcula automaticamente o balanço acumulado de Entradas vs Saídas.")
+        st.subheader("📊 Extrato de Saldo por Fornecedor")
+        
+        forn_filtro = st.text_input("🔍 Filtrar por Nome do Fornecedor:", placeholder="Digite o nome do fornecedor para pesquisar...")
 
-        # Exemplo estruturado de extrato
-        dados_extrato = [
-            {"Fornecedor": "Produtor de Batata Y", "Paletes PBR": "+12 (Devendo PBR)", "Caixa Tropical": "0", "Caixa Louca": "0"},
-            {"Fornecedor": "Goiaba Silva (Atibaia)", "Paletes PBR": "0", "Caixa Tropical": "-45 (Fornecedor com Caixas)", "Caixa Louca": "0"},
-            {"Fornecedor": "Distribuidora Ceasa SP", "Paletes PBR": "0", "Caixa Tropical": "0", "Caixa Louca": "+30 Louca Alta"}
+        dados_extrato_limpo = [
+            {"Fornecedor": "Produtor de Batata Y", "Embalagem": "Palete PBR", "Entrada": 12, "Saída": 0, "Saldo Atual": "Devendo 12 Paletes"},
+            {"Fornecedor": "Goiaba Silva (Atibaia)", "Embalagem": "Caixa Tropical", "Entrada": 0, "Saída": 45, "Saldo Atual": "Fornecedor com 45 Caixas"},
+            {"Fornecedor": "Distribuidora Ceasa SP", "Embalagem": "Caixa Louca ALTA", "Entrada": 30, "Saída": 0, "Saldo Atual": "Devendo 30 Caixas Loucas"}
         ]
-        st.dataframe(pd.DataFrame(dados_extrato), use_container_width=True)
+        
+        df_ext = pd.DataFrame(dados_extrato_limpo)
+        if forn_filtro.strip():
+            df_ext = df_ext[df_ext["Fornecedor"].str.lower().str.contains(forn_filtro.strip().lower())]
+
+        st.dataframe(df_ext, use_container_width=True)
 
 # -------------------------------------------------------------------
 # CADASTROS E AUXILIARES
