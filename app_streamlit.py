@@ -108,13 +108,13 @@ st.sidebar.markdown("### Navegação do Módulo Tropical")
 modulo = st.sidebar.radio(
     "",
     [
-        "📱 Conferência Mobile & Picking",
-        "🚚 Carregamento & Cupom de Saída",
-        "📍 Entregas & Devolução de Caixas",
-        "⚙️ Gestão de Rotas & Unificação",
-        "📲 Coletor / Terminal de Bipagem",
-        "📋 Separação do Dia (ERP)",
-        "🔮 Previsão de IA",
+        "📋 1. Importar Base do Dia (ERP)",
+        "⚙️ 2. Gestão de Rotas & Unificação",
+        "🔮 3. Previsão de IA & Dimensionamento",
+        "📲 4. Coletor / Terminal de Bipagem",
+        "📱 5. Conferência Mobile & Picking",
+        "🚚 6. Carregamento & Cupom de Saída",
+        "📍 7. Entregas & Devolução de Caixas",
         "🗺️ Endereços das Escolas",
         "📦 Controle de Caixas & Fornecedores",
         "✏️ Lançamentos Avulsos"
@@ -171,327 +171,112 @@ def formatar_descricao_ovos(bj_pvc, bj_comum):
 
     return txt_final, vol_tot_ovos
 
-# -------------------------------------------------------------------
-# 1. CONFERÊNCIA MOBILE & PICKING DE CARREGAMENTO
-# -------------------------------------------------------------------
-if modulo == "📱 Conferência Mobile & Picking":
-    st.header("📱 Módulo de Conferência Mobile & Picking")
-    st.caption("Interface otimizada para smartphones de conferentes na doca e liberação de picking.")
-
-    tab_conf_mob, tab_conf_super = st.tabs(["📲 Conferente (Celular)", "📊 Painel do Supervisor & Picking"])
-
-    df_base = st.session_state.get('df_separacao', None)
-
-    with tab_conf_mob:
-        if df_base is not None and not df_base.empty:
-            col_req = 'NUMREQ' if 'NUMREQ' in df_base.columns else 'PEDIDO'
-            col_emp = 'Empresa' if 'Empresa' in df_base.columns else 'CLIENTE'
-            col_prod = 'PRODUTO' if 'PRODUTO' in df_base.columns else 'PRODUTO'
-            col_qtd = 'Qtdade' if 'Qtdade' in df_base.columns else 'QTD'
-            col_uni = 'UNIDADE' if 'UNIDADE' in df_base.columns else 'UN'
-            col_rota = 'TRP_FANTASIA' if 'TRP_FANTASIA' in df_base.columns else 'ROTA'
-
-            st.subheader("🔍 Localizar Pedido para Conferência")
-            cod_bipado = st.text_input("Bipe o código do ticket / NUMREQ ou selecione abaixo:", placeholder="Aguardando bipagem do ticket...")
-
-            lista_pedidos_opt = ["-- Selecione o Pedido --"] + sorted(df_base[col_req].astype(str).unique().tolist())
-            
-            if cod_bipado.strip() in lista_pedidos_opt:
-                ped_selecionado = cod_bipado.strip()
-            else:
-                sel = st.selectbox("Ou selecione o Pedido:", lista_pedidos_opt, index=0)
-                ped_selecionado = sel if sel != "-- Selecione o Pedido --" else None
-
-            if ped_selecionado:
-                df_ped = df_base[df_base[col_req].astype(str) == str(ped_selecionado)]
-                nome_cliente = df_ped[col_emp].iloc[0] if col_emp in df_ped.columns else "Cliente"
-                nome_rota = df_ped[col_rota].iloc[0] if col_rota in df_ped.columns else "Geral"
-
-                st.markdown(f"### 📦 Pedido: `{ped_selecionado}`")
-                st.info(f"🏢 **Cliente/Empresa:** {nome_cliente} | 🚚 **Rota:** {nome_rota}")
-
-                st.markdown("#### 📋 Checklist de Produtos")
-                st.caption("Marque os itens conforme confere a mercadoria na doca:")
-
-                todas_checadas = True
-                for idx, row in df_ped.iterrows():
-                    item_str = f"{row[col_prod]} — {fmt_br_float(row[col_qtd])} {row[col_uni]}"
-                    check = st.checkbox(item_str, key=f"chk_{idx}")
-                    if not check:
-                        todas_checadas = False
-
-                kg_p, un_p, bj_p, out_p, cx_tot_p, bj_pvc_p, bj_com_p, cx_kg_p, cx_un_p, cx_out_p = calcular_resumo_caixas(df_ped, col_qtd, col_uni, col_prod)
-                txt_ovos_blindado, vol_ovos_num = formatar_descricao_ovos(bj_pvc_p, bj_com_p)
-
-                st.markdown("---")
-                st.markdown("#### 📦 Quantidade de Embalagens Encontradas")
-
-                c_cx1, c_cx2 = st.columns(2)
-                with c_cx1:
-                    qtd_tropical = st.number_input("Caixas Tropical (Hortifrúti):", min_value=0, value=0, step=1)
-                with c_cx2:
-                    st.text_input("Ovos no Pedido (Fechado/Regra):", value=txt_ovos_blindado, disabled=True)
-
-                conferente_nome = st.session_state.get('usuario_ativo', 'Conferente 01')
-
-                if st.button("✅ Finalizar & Aprovar Pedido", type="primary", use_container_width=True):
-                    if not todas_checadas:
-                        st.warning("⚠️ Atenção: Nem todos os itens foram marcados no checklist!")
-                    
-                    dados_conferencia = {
-                        "numreq": str(ped_selecionado),
-                        "cliente": str(nome_cliente),
-                        "rota": str(nome_rota),
-                        "caixas_tropical": int(qtd_tropical),
-                        "caixas_ovos": vol_ovos_num,
-                        "desc_ovos": str(txt_ovos_blindado),
-                        "conferente": str(conferente_nome),
-                        "status": "CONFERIDO",
-                        "data_registro": HOJE_STR
-                    }
-
-                    if supabase:
-                        try:
-                            supabase.table("conferencia").insert(dados_conferencia).execute()
-                            st.success(f"✅ Pedido {ped_selecionado} conferido e aprovado com sucesso!")
-                        except Exception as e:
-                            st.error(f"Erro ao salvar conferência no banco: {e}")
-                    else:
-                        st.success(f"✅ Pedido {ped_selecionado} aprovado localmente!")
-
-                    st.balloons()
-            else:
-                st.info("👆 Por favor, bipe o ticket ou selecione um pedido para abrir o checklist.")
-        else:
-            st.warning("💡 Por favor, primeiro suba a planilha na aba '📋 Separação do Dia (ERP)' para ativar a conferência.")
-
-    with tab_conf_super:
-        st.subheader("📊 Monitoramento de Conferência da Doca & Liberação de Picking")
+def exibir_metricas_detalhadas(df, col_qtd, col_uni, col_rota, col_empresa, col_req, col_prod, titulo=""):
+    if titulo:
+        st.markdown(f"#### {titulo}")
         
-        res_conf = []
-        if supabase:
-            try:
-                r = supabase.table("conferencia").select("*").eq("data_registro", HOJE_STR).execute()
-                res_conf = r.data if r.data else []
-            except Exception:
-                res_conf = []
+    c1, c2, c3, c4, c5, c6, c7 = st.columns(7)
+    
+    num_rotas = df[col_rota].nunique() if col_rota in df.columns else 0
+    num_clientes = df[col_empresa].nunique() if col_empresa in df.columns else 0
+    num_pedidos = df[col_req].nunique() if col_req in df.columns else 0
+        
+    kg_total, un_total, bj_total, outros_total, cx_total_geral, bj_pvc, bj_comum, cx_kg, cx_un, cx_outros = calcular_resumo_caixas(df, col_qtd, col_uni, col_prod)
+    
+    c1.markdown(f'<div class="card-laranja"><div class="card-titulo">Rotas</div><div class="card-valor">{fmt_br_int(num_rotas)}</div></div>', unsafe_allow_html=True)
+    c2.markdown(f'<div class="card-laranja"><div class="card-titulo">Clientes</div><div class="card-valor">{fmt_br_int(num_clientes)}</div></div>', unsafe_allow_html=True)
+    c3.markdown(f'<div class="card-laranja"><div class="card-titulo">Pedidos</div><div class="card-valor">{fmt_br_int(num_pedidos)}</div></div>', unsafe_allow_html=True)
+    c4.markdown(f'<div class="card-laranja"><div class="card-titulo">Peso (KG)</div><div class="card-valor">{fmt_br_float(kg_total)} kg</div></div>', unsafe_allow_html=True)
+    c5.markdown(f'<div class="card-laranja"><div class="card-titulo">Unidades</div><div class="card-valor">{fmt_br_int(un_total)} und</div></div>', unsafe_allow_html=True)
+    c6.markdown(f'<div class="card-laranja"><div class="card-titulo">Ovos (BJ)</div><div class="card-valor">{fmt_br_int(bj_total)} bj</div></div>', unsafe_allow_html=True)
+    c7.markdown(f'<div class="card-laranja"><div class="card-titulo">Outros</div><div class="card-valor">{fmt_br_int(outros_total)} vol</div></div>', unsafe_allow_html=True)
 
-        df_conf = pd.DataFrame(res_conf) if res_conf else pd.DataFrame(columns=["numreq", "cliente", "rota", "caixas_tropical", "caixas_ovos", "desc_ovos", "conferente", "status"])
+    st.markdown("##### 📦 Estimativa de Caixas e Embalagens de Separação")
+    
+    cx_pvc_fechadas = int(bj_pvc // 10)
+    avulso_pvc = int(bj_pvc % 10)
 
-        if df_base is not None and not df_base.empty:
-            col_rota = 'TRP_FANTASIA' if 'TRP_FANTASIA' in df_base.columns else 'ROTA'
-            col_req = 'NUMREQ' if 'NUMREQ' in df_base.columns else 'PEDIDO'
+    cx_comum_fechadas = int(bj_comum // 12)
+    avulso_comum = int(bj_comum % 12)
 
-            rotas_disp = sorted(df_base[col_rota].dropna().unique().tolist())
-            rota_sel_picking = st.selectbox("Selecione a Rota para Gerar o Picking de Carregamento:", rotas_disp)
+    txt_pvc = f"{cx_pvc_fechadas} cx" + (f" + {avulso_pvc} bdj" if avulso_pvc > 0 else "")
+    txt_comum = f"{cx_comum_fechadas} cx" + (f" + {avulso_comum} bdj" if avulso_comum > 0 else "")
 
-            if rota_sel_picking:
-                df_pedidos_rota = df_base[df_base[col_rota] == rota_sel_picking]
-                total_pedidos_rota = df_pedidos_rota[col_req].nunique()
-                
-                pedidos_conf_rota = df_conf[df_conf["rota"] == rota_sel_picking] if not df_conf.empty else pd.DataFrame()
-                qtd_conf_rota = pedidos_conf_rota["numreq"].nunique() if not pedidos_conf_rota.empty else 0
-
-                pct_rota = (qtd_conf_rota / total_pedidos_rota * 100) if total_pedidos_rota > 0 else 0
-
-                st.markdown(f"#### Status da Rota: `{rota_sel_picking}`")
-                
-                k_p1, k_p2, k_p3 = st.columns(3)
-                k_p1.metric("Total de Pedidos da Rota", total_pedidos_rota)
-                k_p2.metric("Pedidos Conferidos", qtd_conf_rota)
-                k_p3.metric("Progresso da Rota", f"{pct_rota:.1f}%".replace('.', ','))
-
-                st.progress(min(1.0, pct_rota / 100.0))
-
-                st.write("---")
-                st.markdown("### 📄 Picking de Carregamento (Consolidado da Rota)")
-
-                if not pedidos_conf_rota.empty:
-                    tot_tropical = pedidos_conf_rota["caixas_tropical"].sum()
-                    tot_ovos_vols = pedidos_conf_rota["caixas_ovos"].sum()
-                    tot_geral_caixas = tot_tropical + tot_ovos_vols
-
-                    c_pick1, c_pick2, c_pick3 = st.columns(3)
-                    c_pick1.markdown(f'<div class="card-verde"><div class="card-titulo">Total Caixas Tropical</div><div class="card-valor">{tot_tropical} cx</div></div>', unsafe_allow_html=True)
-                    c_pick2.markdown(f'<div class="card-verde"><div class="card-titulo">Volumes Ovos</div><div class="card-valor">{tot_ovos_vols} vol</div></div>', unsafe_allow_html=True)
-                    c_pick3.markdown(f'<div class="card-laranja"><div class="card-titulo">Total Geral a Carregar</div><div class="card-valor">{tot_geral_caixas} vol</div></div>', unsafe_allow_html=True)
-
-                    st.markdown("##### 🏢 Empresas e Caixas do Veículo")
-                    cols_show = [c for c in ["numreq", "cliente", "caixas_tropical", "desc_ovos", "conferente"] if c in pedidos_conf_rota.columns]
-                    st.dataframe(pedidos_conf_rota[cols_show], use_container_width=True)
-
-                    cod_barras_rota = f"PICKING-{HOJE_STR.replace('-','')}-{rota_sel_picking.replace(' ','')}"
-                    
-                    st.markdown("---")
-                    st.subheader("🖨️ Impressão do Picking de Carregamento")
-                    
-                    if st.button("🖨️ Imprimir Ficha de Picking", type="primary"):
-                        st.components.v1.html("<script>window.print();</script>", height=0)
-
-                    html_print = f"""
-                    <div style="border:2px solid #000; padding:20px; font-family:Arial, sans-serif; background-color:#fff; color:#000;">
-                        <div style="text-align:center; border-bottom:2px solid #000; padding-bottom:10px;">
-                            <h2 style="margin:0;">🌴 MÓDULO TROPICAL — EXPEDIÇÃO & CARREGAMENTO</h2>
-                            <h3 style="margin:5px 0;">FICHA DE PICKING — ROTA: {rota_sel_picking}</h3>
-                            <p style="margin:0;">Data: {HOJE_STR} | Base: Campinas</p>
-                        </div>
-                        <div style="margin-top:15px; font-size:16px;">
-                            <p><strong>Total Caixas Tropical:</strong> {tot_tropical} cx</p>
-                            <p><strong>Total Volumes de Ovos:</strong> {tot_ovos_vols} vol</p>
-                            <p><strong>TOTAL GERAL A CARREGAR:</strong> {tot_geral_caixas} volumes</p>
-                        </div>
-                        <div style="text-align:center; margin-top:20px; border-top:2px solid #000; padding-top:15px;">
-                            <img src="https://bwipjs-api.metafloor.com/?bcid=code128&text={cod_barras_rota}&scale=3&rotate=N&includetext" alt="Código de Barras">
-                            <p style="font-family:monospace; font-weight:bold; font-size:16px; margin-top:5px;">{cod_barras_rota}</p>
-                        </div>
-                    </div>
-                    """
-                    st.markdown(html_print, unsafe_allow_html=True)
-                else:
-                    st.info("Nenhum pedido desta rota foi conferido no celular ainda.")
+    k1, k2, k3, k4, k5, k6 = st.columns(6)
+    k1.markdown(f'<div class="card-verde"><div class="card-titulo">CX Peso</div><div class="card-valor">{fmt_br_int(cx_kg)} cx</div></div>', unsafe_allow_html=True)
+    k2.markdown(f'<div class="card-verde"><div class="card-titulo">CX Und</div><div class="card-valor">{fmt_br_int(cx_un)} cx</div></div>', unsafe_allow_html=True)
+    k3.markdown(f'<div class="card-verde"><div class="card-titulo">Ovo PVC</div><div class="card-valor">{txt_pvc}<br><span style="font-size:11px; font-weight:normal;">({fmt_br_int(bj_pvc)} bdj)</span></div></div>', unsafe_allow_html=True)
+    k4.markdown(f'<div class="card-verde"><div class="card-titulo">Ovo Comum</div><div class="card-valor">{txt_comum}<br><span style="font-size:11px; font-weight:normal;">({fmt_br_int(bj_comum)} bdj)</span></div></div>', unsafe_allow_html=True)
+    k5.markdown(f'<div class="card-verde"><div class="card-titulo">CX Outros</div><div class="card-valor">{fmt_br_int(cx_outros)} cx</div></div>', unsafe_allow_html=True)
+    k6.markdown(f'<div class="card-verde"><div class="card-titulo">Total Caixas Tropical</div><div class="card-valor">{fmt_br_int(cx_total_geral)} cx</div></div>', unsafe_allow_html=True)
 
 # -------------------------------------------------------------------
-# 2. CARREGAMENTO & CUPOM DE SAÍDA (MOTORISTA/AGREGADO)
+# 1. IMPORTAR BASE DO DIA (ERP)
 # -------------------------------------------------------------------
-elif modulo == "🚚 Carregamento & Cupom de Saída":
-    st.header("🚚 Módulo do Motorista / Agregado — Carregamento do Veículo")
-    st.caption("Insira o código do Picking de Carregamento para validar a rota e emitir o Cupom de Saída.")
-
-    cod_pick_input = st.text_input("📲 Bipe ou Digite o Código do Picking de Carregamento:", placeholder="Ex: PICKING-20260903-227-ROTA...")
-
-    if cod_pick_input.strip():
-        # Busca conferência no Supabase
-        res_conf = []
-        if supabase:
-            try:
-                r = supabase.table("conferencia").select("*").eq("data_registro", HOJE_STR).execute()
-                res_conf = r.data if r.data else []
-            except Exception:
-                res_conf = []
-
-        df_conf = pd.DataFrame(res_conf) if res_conf else pd.DataFrame()
-
-        if not df_conf.empty:
-            # Filtra ou simula busca pela rota do picking
-            st.success(f"✅ Picking `{cod_pick_input.strip()}` localizado com sucesso!")
+if modulo == "📋 1. Importar Base do Dia (ERP)":
+    st.header("📋 Base de Separação Diária do Galpão (ERP)")
+    uploaded_file = st.file_uploader("Suba a planilha do dia (Base0608.xlsx / Pré-venda)", type=["csv", "xlsx"])
+    
+    if uploaded_file is not None:
+        try:
+            df_dia = pd.read_csv(uploaded_file) if uploaded_file.name.endswith('.csv') else pd.read_excel(uploaded_file)
+            st.success(f"Planilha carregada com sucesso! Total de registros: {len(df_dia)}")
             
-            st.markdown("### 📋 Checklist de Carregamento do Veículo (Fundo -> Porta)")
-            st.caption("Marque cada empresa/unidade conforme embarca no caminhão:")
+            col_rota = 'TRP_FANTASIA' if 'TRP_FANTASIA' in df_dia.columns else 'ROTA'
+            col_empresa = 'Empresa' if 'Empresa' in df_dia.columns else 'CLIENTE'
+            col_prod = 'PRODUTO' if 'PRODUTO' in df_dia.columns else 'PRODUTO'
+            col_qtd = 'Qtdade' if 'Qtdade' in df_dia.columns else 'QTD'
+            col_uni = 'UNIDADE' if 'UNIDADE' in df_dia.columns else 'UN'
+            col_req = 'NUMREQ' if 'NUMREQ' in df_dia.columns else 'PEDIDO'
 
-            motorista_nome = st.text_input("Nome do Motorista / Agregado:", value="Motorista Agregado 01")
-            placa_veiculo = st.text_input("Placa do Veículo:", value="ABC-1234")
-
-            empresas_embarcadas = []
-            todas_embarcadas = True
-
-            for idx, row in df_conf.iterrows():
-                label_emp = f"🏢 {row.get('cliente')} — Pedido `{row.get('numreq')}` ({row.get('caixas_tropical')} Cx Tropical | {row.get('desc_ovos')})"
-                chk = st.checkbox(label_emp, key=f"carg_{idx}")
-                if chk:
-                    empresas_embarcadas.append(row)
-                else:
-                    todas_embarcadas = False
+            exibir_metricas_detalhadas(df_dia, col_qtd, col_uni, col_rota, col_empresa, col_req, col_prod, "🚚 Resumo Geral de Todas as Rotas do Galpão")
 
             st.write("---")
-            if st.button("🚀 Finalizar Carregamento & Emitir Cupom de Saída (2 Vias)", type="primary", use_container_width=True):
-                if not todas_embarcadas:
-                    st.warning("⚠️ Atenção: Existem empresas da rota que não foram marcadas como embarcadas!")
+            if st.button("💾 Salvar/Importar Base no Supabase", type="primary"):
+                if supabase:
+                    try:
+                        records = []
+                        for _, row in df_dia.iterrows():
+                            records.append({
+                                "pedido_id": str(row.get(col_req, '')),
+                                "cliente": str(row.get(col_empresa, '')),
+                                "produto": str(row.get(col_prod, '')),
+                                "setor": str(row.get(col_rota, 'GERAL')),
+                                "qtd_pedida": float(row.get(col_qtd, 0)),
+                                "unidade": str(row.get(col_uni, 'KG'))
+                            })
+                        supabase.table("separacao_dia").insert(records).execute()
+                        st.success("Toda a carga da planilha foi salva com sucesso no Supabase!")
+                    except Exception as err:
+                        st.error(f"Erro ao salvar no banco: {err}")
+                else:
+                    st.success("Planilha processada e pronta na memória local!")
 
-                tot_trop_carg = sum([int(r.get("caixas_tropical", 0)) for r in empresas_embarcadas]) if empresas_embarcadas else 0
-                tot_ovos_carg = sum([int(r.get("caixas_ovos", 0)) for r in empresas_embarcadas]) if empresas_embarcadas else 0
+            st.subheader("Pré-visualização dos Pedidos")
+            st.dataframe(df_dia.head(20), use_container_width=True)
 
-                st.success("✅ Carregamento Concluído! O Módulo de Entregas no Cliente foi liberado automaticamente!")
+            st.session_state['df_separacao'] = df_dia
 
-                st.markdown("### 🧾 CUPOM DE SAÍDA (2 VIAS)")
-                if st.button("🖨️ Imprimir Cupom de Saída", type="primary"):
-                    st.components.v1.html("<script>window.print();</script>", height=0)
+        except Exception as e:
+            st.error(f"Erro ao processar planilha: {e}")
+    elif 'df_separacao' in st.session_state and st.session_state['df_separacao'] is not None:
+        df_dia = st.session_state['df_separacao']
+        col_rota = 'TRP_FANTASIA' if 'TRP_FANTASIA' in df_dia.columns else 'ROTA'
+        col_empresa = 'Empresa' if 'Empresa' in df_dia.columns else 'CLIENTE'
+        col_prod = 'PRODUTO' if 'PRODUTO' in df_dia.columns else 'PRODUTO'
+        col_qtd = 'Qtdade' if 'Qtdade' in df_dia.columns else 'QTD'
+        col_uni = 'UNIDADE' if 'UNIDADE' in df_dia.columns else 'UN'
+        col_req = 'NUMREQ' if 'NUMREQ' in df_dia.columns else 'PEDIDO'
 
-                for via in ["1ª VIA — GALPÃO / EXPEDIÇÃO", "2ª VIA — MOTORISTA / TRANSPORTE"]:
-                    html_cupom = f"""
-                    <div style="border:2px dashed #000; padding:15px; margin-bottom:20px; font-family:Arial, sans-serif; background-color:#fff; color:#000;">
-                        <div style="text-align:center; border-bottom:1px solid #000; padding-bottom:5px;">
-                            <h3 style="margin:0;">🌴 MÓDULO TROPICAL — CUPOM DE SAÍDA</h3>
-                            <h4 style="margin:3px 0;">{via}</h4>
-                            <p style="margin:0; font-size:12px;">Data: {HOJE_STR} | Placa: {placa_veiculo} | Motorista: {motorista_nome}</p>
-                        </div>
-                        <div style="margin-top:10px; font-size:13px;">
-                            <p><strong>Picking:</strong> {cod_pick_input.strip()}</p>
-                            <p><strong>Total Caixas Tropical Embarcadas:</strong> {tot_trop_carg} cx</p>
-                            <p><strong>Total Volumes de Ovos Embarcados:</strong> {tot_ovos_carg} vol</p>
-                            <p><strong>Empresas Embarcadas:</strong> {len(empresas_embarcadas)} unidades</p>
-                        </div>
-                        <div style="margin-top:20px; display:flex; justify-content:space-between; font-size:11px; text-align:center;">
-                            <div>___________________________________<br>Assinatura Expedição</div>
-                            <div>___________________________________<br>Assinatura Motorista</div>
-                        </div>
-                    </div>
-                    """
-                    st.markdown(html_cupom, unsafe_allow_html=True)
-
-        else:
-            st.info("Nenhuma conferência finalizada encontrada para a data de hoje.")
-
-# -------------------------------------------------------------------
-# 3. ENTREGAS & DEVOLUÇÃO DE CAIXAS
-# -------------------------------------------------------------------
-elif modulo == "📍 Entregas & Devolução de Caixas":
-    st.header("📍 Módulo de Entrega no Cliente & Controle de Vasilhames")
-    st.caption("Acompanhamento das paradas do caminhão e acerto de vasilhames (Caixas Tropical).")
-
-    res_conf = []
-    if supabase:
-        try:
-            r = supabase.table("conferencia").select("*").eq("data_registro", HOJE_STR).execute()
-            res_conf = r.data if r.data else []
-        except Exception:
-            res_conf = []
-
-    df_conf = pd.DataFrame(res_conf) if res_conf else pd.DataFrame()
-
-    if not df_conf.empty:
-        st.subheader("🏢 Roteiro de Entregas do Veículo")
-        
-        for idx, row in df_conf.iterrows():
-            with st.expander(f"📍 Parada {idx+1}: {row.get('cliente')} — Pedido `{row.get('numreq')}`"):
-                st.write(f"🚚 **Rota:** {row.get('rota')}")
-                st.write(f"📦 **Caixas Tropical Esperadas:** {row.get('caixas_tropical')} cx")
-                st.write(f"🥚 **Ovos:** {row.get('desc_ovos')}")
-
-                st.markdown("---")
-                st.markdown("#### 🔄 Acerto de Vasilhame na Entrega")
-                c_ent1, c_ent2 = st.columns(2)
-                with c_ent1:
-                    cx_deixadas = st.number_input(f"Caixas Tropical Deixadas ({row.get('numreq')}):", min_value=0, value=int(row.get('caixas_tropical', 0)), key=f"deix_{idx}")
-                with c_ent2:
-                    cx_retiradas = st.number_input(f"Caixas Tropical Retiradas (Vazia):", min_value=0, value=0, key=f"ret_{idx}")
-
-                obs_entrega = st.text_input(f"Observação do Recebedor / Assinatura:", key=f"obs_{idx}")
-
-                if st.button(f"✅ Confirmar Entrega em {row.get('cliente')}", key=f"btn_ent_{idx}", type="primary"):
-                    dados_baixa = {
-                        "numreq": row.get('numreq'),
-                        "cliente": row.get('cliente'),
-                        "caixas_deixadas": int(cx_deixadas),
-                        "caixas_retiradas": int(cx_retiradas),
-                        "obs": obs_entrega,
-                        "data_registro": HOJE_STR,
-                        "status": "ENTREGUE"
-                    }
-                    if supabase:
-                        try:
-                            supabase.table("entregas").insert(dados_baixa).execute()
-                            st.success(f"✅ Entrega confirmada! Saldo do cliente atualizado: +{cx_deixadas} / -{cx_retiradas} Caixas Tropical.")
-                        except Exception as e:
-                            st.error(f"Erro ao registrar baixa: {e}")
-                    else:
-                        st.success(f"✅ Entrega de {row.get('cliente')} confirmada localmente!")
-    else:
-        st.info("Nenhuma carga liberada para entrega no momento. Realize a conferência e o carregamento do veículo primeiro.")
+        exibir_metricas_detalhadas(df_dia, col_qtd, col_uni, col_rota, col_empresa, col_req, col_prod, "🚚 Resumo Geral de Todas as Rotas do Galpão")
+        st.write("---")
+        st.subheader("Pré-visualização dos Pedidos")
+        st.dataframe(df_dia.head(20), use_container_width=True)
 
 # -------------------------------------------------------------------
-# 4. GESTÃO DE ROTAS & UNIFICAÇÃO (INTERNO / RETAGUARDA)
+# 2. GESTÃO DE ROTAS & UNIFICAÇÃO
 # -------------------------------------------------------------------
-elif modulo == "⚙️ Gestão de Rotas & Unificação":
+elif modulo == "⚙️ 2. Gestão de Rotas & Unificação":
     st.header("⚙️ Gestão Interna de Rotas & Unificação de Cargas")
     st.caption("Ferramenta de retaguarda do supervisor para reordenar sequências ou agrupar rotas antes da expedição.")
 
@@ -512,15 +297,55 @@ elif modulo == "⚙️ Gestão de Rotas & Unificação":
 
         if rotas_agrupadas:
             df_agrup = df_rotas[df_rotas[col_rota].isin(rotas_agrupadas)]
-            st.info(f"As alterações feitas nesta tela serão herdadas automaticamente pelo Módulo do Conferente e pelo Motorista.")
+            st.info("As alterações feitas nesta tela serão herdadas automaticamente pelo Módulo do Conferente e pelo Motorista.")
             st.dataframe(df_agrup[[col_req, col_empresa, col_rota, col_prod, col_qtd, col_uni]].head(30), use_container_width=True)
     else:
-        st.warning("💡 Por favor, primeiro suba a planilha na aba '📋 Separação do Dia (ERP)' para carregar as rotas.")
+        st.warning("💡 Por favor, primeiro suba a planilha na aba '📋 1. Importar Base do Dia (ERP)' para carregar as rotas.")
 
 # -------------------------------------------------------------------
-# 5. COLETOR / TERMINAL DE BIPAGEM MULTI-OPERAÇÃO
+# 3. PREVISÃO DE IA & DIMENSIONAMENTO
 # -------------------------------------------------------------------
-elif modulo == "📲 Coletor / Terminal de Bipagem":
+elif modulo == "🔮 3. Previsão de IA & Dimensionamento":
+    st.header("🔮 Previsão de Produtividade & Dimensionamento de Galpão")
+    st.caption("Cálculo calibrado com base na produtividade real da equipe (1.110 caixas em ~2h com 41 separadores).")
+
+    df_base = st.session_state.get('df_separacao', None)
+
+    col_qtd = 'Qtdade' if df_base is not None and 'Qtdade' in df_base.columns else 'QTD'
+    col_uni = 'UNIDADE' if df_base is not None and 'UNIDADE' in df_base.columns else 'UN'
+    col_prod = 'PRODUTO' if df_base is not None and 'PRODUTO' in df_base.columns else 'PRODUTO'
+
+    if df_base is not None and not df_base.empty:
+        kg_tot, un_tot, bj_tot, out_tot, cx_total_real, _, _, _, _, _ = calcular_resumo_caixas(df_base, col_qtd, col_uni, col_prod)
+        
+        st.info(f"📊 **Carga Atual no Galpão:** **{fmt_br_float(kg_tot)} KG** correspondendo a **{fmt_br_int(cx_total_real)} Caixas Totais**.")
+
+        st.write("---")
+        st.subheader("👥 Controle de Faltas e Dimensionamento do Turno")
+        qtd_separadores = st.slider("Selecione a quantidade de separadores PRESENTES no turno hoje:", min_value=1, max_value=50, value=41)
+
+        CADENCIA_POR_SEPARADOR = 13.5365
+        produtividade_equipe_cxh = qtd_separadores * CADENCIA_POR_SEPARADOR
+
+        tempo_horas_real = cx_total_real / produtividade_equipe_cxh if produtividade_equipe_cxh > 0 else 0
+        horas_exatas = int(tempo_horas_real)
+        minutos_exatos = int((tempo_horas_real - horas_exatas) * 60)
+
+        st.markdown("---")
+        st.subheader("🎯 Planejamento do Turno de Separação")
+        
+        m1, m2, m3 = st.columns(3)
+        m1.markdown(f'<div class="card-laranja"><div class="card-titulo">Produtividade da Equipe</div><div class="card-valor">{produtividade_equipe_cxh:.1f} cx/h</div></div>', unsafe_allow_html=True)
+        m2.markdown(f'<div class="card-verde"><div class="card-titulo">Volume Total de Caixas</div><div class="card-valor">{fmt_br_int(cx_total_real)} caixas</div></div>', unsafe_allow_html=True)
+        m3.markdown(f'<div class="card-laranja"><div class="card-titulo">Tempo Estimado do Turno</div><div class="card-valor">{horas_exatas}h {minutos_exatos}min</div></div>', unsafe_allow_html=True)
+
+    else:
+        st.warning("💡 Por favor, primeiro suba a planilha na aba '📋 1. Importar Base do Dia (ERP)' para carregar os volumes da carga.")
+
+# -------------------------------------------------------------------
+# 4. COLETOR / TERMINAL DE BIPAGEM
+# -------------------------------------------------------------------
+elif modulo == "📲 4. Coletor / Terminal de Bipagem":
     st.header("📲 Coletor de Separação (Terminal do Galpão)")
     st.caption("Compatível com leitor de código de barras ou digitação de fichas/NUMREQ.")
 
@@ -625,95 +450,321 @@ elif modulo == "📲 Coletor / Terminal de Bipagem":
             st.info("Nenhuma bipagem registrada hoje ainda.")
 
 # -------------------------------------------------------------------
-# 6. SEPARAÇÃO DO DIA (ERP)
+# 5. CONFERÊNCIA MOBILE & PICKING
 # -------------------------------------------------------------------
-elif modulo == "📋 Separação do Dia (ERP)":
-    st.header("📋 Base de Separação Diária do Galpão (ERP)")
-    uploaded_file = st.file_uploader("Suba a planilha do dia (Base0608.xlsx / Pré-venda)", type=["csv", "xlsx"])
-    
-    if uploaded_file is not None:
-        try:
-            df_dia = pd.read_csv(uploaded_file) if uploaded_file.name.endswith('.csv') else pd.read_excel(uploaded_file)
-            st.success(f"Planilha carregada com sucesso! Total de registros: {len(df_dia)}")
-            
-            col_rota = 'TRP_FANTASIA' if 'TRP_FANTASIA' in df_dia.columns else 'ROTA'
-            col_empresa = 'Empresa' if 'Empresa' in df_dia.columns else 'CLIENTE'
-            col_prod = 'PRODUTO' if 'PRODUTO' in df_dia.columns else 'PRODUTO'
-            col_qtd = 'Qtdade' if 'Qtdade' in df_dia.columns else 'QTD'
-            col_uni = 'UNIDADE' if 'UNIDADE' in df_dia.columns else 'UN'
-            col_req = 'NUMREQ' if 'NUMREQ' in df_dia.columns else 'PEDIDO'
+elif modulo == "📱 5. Conferência Mobile & Picking":
+    st.header("📱 Módulo de Conferência Mobile & Picking")
+    st.caption("Interface otimizada para smartphones de conferentes na doca e liberação de picking.")
 
-            st.write("---")
-            if st.button("💾 Salvar/Importar Base no Supabase", type="primary"):
-                if supabase:
-                    try:
-                        records = []
-                        for _, row in df_dia.iterrows():
-                            records.append({
-                                "pedido_id": str(row.get(col_req, '')),
-                                "cliente": str(row.get(col_empresa, '')),
-                                "produto": str(row.get(col_prod, '')),
-                                "setor": str(row.get(col_rota, 'GERAL')),
-                                "qtd_pedida": float(row.get(col_qtd, 0)),
-                                "unidade": str(row.get(col_uni, 'KG'))
-                            })
-                        supabase.table("separacao_dia").insert(records).execute()
-                        st.success("Toda a carga da planilha foi salva com sucesso no Supabase!")
-                    except Exception as err:
-                        st.error(f"Erro ao salvar no banco: {err}")
-                else:
-                    st.success("Planilha processada e pronta na memória local!")
-
-            st.subheader("Pré-visualização dos Pedidos")
-            st.dataframe(df_dia.head(20), use_container_width=True)
-
-            st.session_state['df_separacao'] = df_dia
-
-        except Exception as e:
-            st.error(f"Erro ao processar planilha: {e}")
-
-# -------------------------------------------------------------------
-# 7. PREVISÃO DE IA
-# -------------------------------------------------------------------
-elif modulo == "🔮 Previsão de IA":
-    st.header("🔮 Previsão de Produtividade & Dimensionamento de Galpão")
-    st.caption("Cálculo calibrado com base na produtividade real da equipe (1.110 caixas em ~2h com 41 separadores).")
+    tab_conf_mob, tab_conf_super = st.tabs(["📲 Conferente (Celular)", "📊 Painel do Supervisor & Picking"])
 
     df_base = st.session_state.get('df_separacao', None)
 
-    col_qtd = 'Qtdade' if df_base is not None and 'Qtdade' in df_base.columns else 'QTD'
-    col_uni = 'UNIDADE' if df_base is not None and 'UNIDADE' in df_base.columns else 'UN'
-    col_prod = 'PRODUTO' if df_base is not None and 'PRODUTO' in df_base.columns else 'PRODUTO'
+    with tab_conf_mob:
+        if df_base is not None and not df_base.empty:
+            col_req = 'NUMREQ' if 'NUMREQ' in df_base.columns else 'PEDIDO'
+            col_emp = 'Empresa' if 'Empresa' in df_base.columns else 'CLIENTE'
+            col_prod = 'PRODUTO' if 'PRODUTO' in df_base.columns else 'PRODUTO'
+            col_qtd = 'Qtdade' if 'Qtdade' in df_base.columns else 'QTD'
+            col_uni = 'UNIDADE' if 'UNIDADE' in df_base.columns else 'UN'
+            col_rota = 'TRP_FANTASIA' if 'TRP_FANTASIA' in df_base.columns else 'ROTA'
 
-    if df_base is not None and not df_base.empty:
-        kg_tot, un_tot, bj_tot, out_tot, cx_total_real, _, _, _, _, _ = calcular_resumo_caixas(df_base, col_qtd, col_uni, col_prod)
+            st.subheader("🔍 Localizar Pedido para Conferência")
+            cod_bipado = st.text_input("Bipe o código do ticket / NUMREQ ou selecione abaixo:", placeholder="Aguardando bipagem do ticket...")
+
+            lista_pedidos_opt = ["-- Selecione o Pedido --"] + sorted(df_base[col_req].astype(str).unique().tolist())
+            
+            if cod_bipado.strip() in lista_pedidos_opt:
+                ped_selecionado = cod_bipado.strip()
+            else:
+                sel = st.selectbox("Ou selecione o Pedido:", lista_pedidos_opt, index=0)
+                ped_selecionado = sel if sel != "-- Selecione o Pedido --" else None
+
+            if ped_selecionado:
+                df_ped = df_base[df_base[col_req].astype(str) == str(ped_selecionado)]
+                nome_cliente = df_ped[col_emp].iloc[0] if col_emp in df_ped.columns else "Cliente"
+                nome_rota = df_ped[col_rota].iloc[0] if col_rota in df_ped.columns else "Geral"
+
+                st.markdown(f"### 📦 Pedido: `{ped_selecionado}`")
+                st.info(f"🏢 **Cliente/Empresa:** {nome_cliente} | 🚚 **Rota:** {nome_rota}")
+
+                st.markdown("#### 📋 Checklist de Produtos")
+                st.caption("Marque os itens conforme confere a mercadoria na doca:")
+
+                todas_checadas = True
+                for idx, row in df_ped.iterrows():
+                    item_str = f"{row[col_prod]} — {fmt_br_float(row[col_qtd])} {row[col_uni]}"
+                    check = st.checkbox(item_str, key=f"chk_{idx}")
+                    if not check:
+                        todas_checadas = False
+
+                kg_p, un_p, bj_p, out_p, cx_tot_p, bj_pvc_p, bj_com_p, cx_kg_p, cx_un_p, cx_out_p = calcular_resumo_caixas(df_ped, col_qtd, col_uni, col_prod)
+                txt_ovos_blindado, vol_ovos_num = formatar_descricao_ovos(bj_pvc_p, bj_com_p)
+
+                st.markdown("---")
+                st.markdown("#### 📦 Quantidade de Embalagens Encontradas")
+
+                c_cx1, c_cx2 = st.columns(2)
+                with c_cx1:
+                    qtd_tropical = st.number_input("Caixas Tropical (Hortifrúti):", min_value=0, value=0, step=1)
+                with c_cx2:
+                    st.text_input("Ovos no Pedido (Fechado/Regra):", value=txt_ovos_blindado, disabled=True)
+
+                conferente_nome = st.session_state.get('usuario_ativo', 'Conferente 01')
+
+                if st.button("✅ Finalizar & Aprovar Pedido", type="primary", use_container_width=True):
+                    if not todas_checadas:
+                        st.warning("⚠️ Atenção: Nem todos os itens foram marcados no checklist!")
+                    
+                    dados_conferencia = {
+                        "numreq": str(ped_selecionado),
+                        "cliente": str(nome_cliente),
+                        "rota": str(nome_rota),
+                        "caixas_tropical": int(qtd_tropical),
+                        "caixas_ovos": vol_ovos_num,
+                        "desc_ovos": str(txt_ovos_blindado),
+                        "conferente": str(conferente_nome),
+                        "status": "CONFERIDO",
+                        "data_registro": HOJE_STR
+                    }
+
+                    if supabase:
+                        try:
+                            supabase.table("conferencia").insert(dados_conferencia).execute()
+                            st.success(f"✅ Pedido {ped_selecionado} conferido e aprovado com sucesso!")
+                        except Exception as e:
+                            st.error(f"Erro ao salvar conferência no banco: {e}")
+                    else:
+                        st.success(f"✅ Pedido {ped_selecionado} aprovado localmente!")
+
+                    st.balloons()
+            else:
+                st.info("👆 Por favor, bipe o ticket ou selecione um pedido para abrir o checklist.")
+        else:
+            st.warning("💡 Por favor, primeiro suba a planilha na aba '📋 1. Importar Base do Dia (ERP)' para ativar a conferência.")
+
+    with tab_conf_super:
+        st.subheader("📊 Monitoramento de Conferência da Doca & Liberação de Picking")
         
-        st.info(f"📊 **Carga Atual no Galpão:** **{fmt_br_float(kg_tot)} KG** correspondendo a **{fmt_br_int(cx_total_real)} Caixas Totais**.")
+        res_conf = []
+        if supabase:
+            try:
+                r = supabase.table("conferencia").select("*").eq("data_registro", HOJE_STR).execute()
+                res_conf = r.data if r.data else []
+            except Exception:
+                res_conf = []
 
-        st.write("---")
-        st.subheader("👥 Controle de Faltas e Dimensionamento do Turno")
-        qtd_separadores = st.slider("Selecione a quantidade de separadores PRESENTES no turno hoje:", min_value=1, max_value=50, value=41)
+        df_conf = pd.DataFrame(res_conf) if res_conf else pd.DataFrame(columns=["numreq", "cliente", "rota", "caixas_tropical", "caixas_ovos", "desc_ovos", "conferente", "status"])
 
-        CADENCIA_POR_SEPARADOR = 13.5365
-        produtividade_equipe_cxh = qtd_separadores * CADENCIA_POR_SEPARADOR
+        if df_base is not None and not df_base.empty:
+            col_rota = 'TRP_FANTASIA' if 'TRP_FANTASIA' in df_base.columns else 'ROTA'
+            col_req = 'NUMREQ' if 'NUMREQ' in df_base.columns else 'PEDIDO'
 
-        tempo_horas_real = cx_total_real / produtividade_equipe_cxh if produtividade_equipe_cxh > 0 else 0
-        horas_exatas = int(tempo_horas_real)
-        minutos_exatos = int((tempo_horas_real - horas_exatas) * 60)
+            rotas_disp = sorted(df_base[col_rota].dropna().unique().tolist())
+            rota_sel_picking = st.selectbox("Selecione a Rota para Gerar o Picking de Carregamento:", rotas_disp)
 
-        st.markdown("---")
-        st.subheader("🎯 Planejamento do Turno de Separação")
-        
-        m1, m2, m3 = st.columns(3)
-        m1.markdown(f'<div class="card-laranja"><div class="card-titulo">Produtividade da Equipe</div><div class="card-valor">{produtividade_equipe_cxh:.1f} cx/h</div></div>', unsafe_allow_html=True)
-        m2.markdown(f'<div class="card-verde"><div class="card-titulo">Volume Total de Caixas</div><div class="card-valor">{fmt_br_int(cx_total_real)} caixas</div></div>', unsafe_allow_html=True)
-        m3.markdown(f'<div class="card-laranja"><div class="card-titulo">Tempo Estimado do Turno</div><div class="card-valor">{horas_exatas}h {minutos_exatos}min</div></div>', unsafe_allow_html=True)
+            if rota_sel_picking:
+                df_pedidos_rota = df_base[df_base[col_rota] == rota_sel_picking]
+                total_pedidos_rota = df_pedidos_rota[col_req].nunique()
+                
+                pedidos_conf_rota = df_conf[df_conf["rota"] == rota_sel_picking] if not df_conf.empty else pd.DataFrame()
+                qtd_conf_rota = pedidos_conf_rota["numreq"].nunique() if not pedidos_conf_rota.empty else 0
 
-    else:
-        st.warning("💡 Por favor, primeiro suba a planilha na aba '📋 Separação do Dia (ERP)' para carregar os volumes da carga.")
+                pct_rota = (qtd_conf_rota / total_pedidos_rota * 100) if total_pedidos_rota > 0 else 0
+
+                st.markdown(f"#### Status da Rota: `{rota_sel_picking}`")
+                
+                k_p1, k_p2, k_p3 = st.columns(3)
+                k_p1.metric("Total de Pedidos da Rota", total_pedidos_rota)
+                k_p2.metric("Pedidos Conferidos", qtd_conf_rota)
+                k_p3.metric("Progresso da Rota", f"{pct_rota:.1f}%".replace('.', ','))
+
+                st.progress(min(1.0, pct_rota / 100.0))
+
+                st.write("---")
+                st.markdown("### 📄 Picking de Carregamento (Consolidado da Rota)")
+
+                if not pedidos_conf_rota.empty:
+                    tot_tropical = pedidos_conf_rota["caixas_tropical"].sum()
+                    tot_ovos_vols = pedidos_conf_rota["caixas_ovos"].sum()
+                    tot_geral_caixas = tot_tropical + tot_ovos_vols
+
+                    c_pick1, c_pick2, c_pick3 = st.columns(3)
+                    c_pick1.markdown(f'<div class="card-verde"><div class="card-titulo">Total Caixas Tropical</div><div class="card-valor">{tot_tropical} cx</div></div>', unsafe_allow_html=True)
+                    c_pick2.markdown(f'<div class="card-verde"><div class="card-titulo">Volumes Ovos</div><div class="card-valor">{tot_ovos_vols} vol</div></div>', unsafe_allow_html=True)
+                    c_pick3.markdown(f'<div class="card-laranja"><div class="card-titulo">Total Geral a Carregar</div><div class="card-valor">{tot_geral_caixas} vol</div></div>', unsafe_allow_html=True)
+
+                    st.markdown("##### 🏢 Empresas e Caixas do Veículo")
+                    cols_show = [c for c in ["numreq", "cliente", "caixas_tropical", "desc_ovos", "conferente"] if c in pedidos_conf_rota.columns]
+                    st.dataframe(pedidos_conf_rota[cols_show], use_container_width=True)
+
+                    cod_barras_rota = f"PICKING-{HOJE_STR.replace('-','')}-{rota_sel_picking.replace(' ','')}"
+                    
+                    st.markdown("---")
+                    st.subheader("🖨️ Impressão do Picking de Carregamento")
+                    
+                    if st.button("🖨️ Imprimir Ficha de Picking", type="primary"):
+                        st.components.v1.html("<script>window.print();</script>", height=0)
+
+                    html_print = f"""
+                    <div style="border:2px solid #000; padding:20px; font-family:Arial, sans-serif; background-color:#fff; color:#000;">
+                        <div style="text-align:center; border-bottom:2px solid #000; padding-bottom:10px;">
+                            <h2 style="margin:0;">🌴 MÓDULO TROPICAL — EXPEDIÇÃO & CARREGAMENTO</h2>
+                            <h3 style="margin:5px 0;">FICHA DE PICKING — ROTA: {rota_sel_picking}</h3>
+                            <p style="margin:0;">Data: {HOJE_STR} | Base: Campinas</p>
+                        </div>
+                        <div style="margin-top:15px; font-size:16px;">
+                            <p><strong>Total Caixas Tropical:</strong> {tot_tropical} cx</p>
+                            <p><strong>Total Volumes de Ovos:</strong> {tot_ovos_vols} vol</p>
+                            <p><strong>TOTAL GERAL A CARREGAR:</strong> {tot_geral_caixas} volumes</p>
+                        </div>
+                        <div style="text-align:center; margin-top:20px; border-top:2px solid #000; padding-top:15px;">
+                            <img src="https://bwipjs-api.metafloor.com/?bcid=code128&text={cod_barras_rota}&scale=3&rotate=N&includetext" alt="Código de Barras">
+                            <p style="font-family:monospace; font-weight:bold; font-size:16px; margin-top:5px;">{cod_barras_rota}</p>
+                        </div>
+                    </div>
+                    """
+                    st.markdown(html_print, unsafe_allow_html=True)
+                else:
+                    st.info("Nenhum pedido desta rota foi conferido no celular ainda.")
 
 # -------------------------------------------------------------------
-# 8. ENDEREÇOS DAS ESCOLAS
+# 6. CARREGAMENTO & CUPOM DE SAÍDA
+# -------------------------------------------------------------------
+elif modulo == "🚚 6. Carregamento & Cupom de Saída":
+    st.header("🚚 Módulo do Motorista / Agregado — Carregamento do Veículo")
+    st.caption("Insira o código do Picking de Carregamento para validar a rota e emitir o Cupom de Saída.")
+
+    cod_pick_input = st.text_input("📲 Bipe ou Digite o Código do Picking de Carregamento:", placeholder="Ex: PICKING-20260903-227-ROTA...")
+
+    if cod_pick_input.strip():
+        res_conf = []
+        if supabase:
+            try:
+                r = supabase.table("conferencia").select("*").eq("data_registro", HOJE_STR).execute()
+                res_conf = r.data if r.data else []
+            except Exception:
+                res_conf = []
+
+        df_conf = pd.DataFrame(res_conf) if res_conf else pd.DataFrame()
+
+        if not df_conf.empty:
+            st.success(f"✅ Picking `{cod_pick_input.strip()}` localizado com sucesso!")
+            
+            st.markdown("### 📋 Checklist de Carregamento do Veículo (Fundo -> Porta)")
+            st.caption("Marque cada empresa/unidade conforme embarca no caminhão:")
+
+            motorista_nome = st.text_input("Nome do Motorista / Agregado:", value="Motorista Agregado 01")
+            placa_veiculo = st.text_input("Placa do Veículo:", value="ABC-1234")
+
+            empresas_embarcadas = []
+            todas_embarcadas = True
+
+            for idx, row in df_conf.iterrows():
+                label_emp = f"🏢 {row.get('cliente')} — Pedido `{row.get('numreq')}` ({row.get('caixas_tropical')} Cx Tropical | {row.get('desc_ovos')})"
+                chk = st.checkbox(label_emp, key=f"carg_{idx}")
+                if chk:
+                    empresas_embarcadas.append(row)
+                else:
+                    todas_embarcadas = False
+
+            st.write("---")
+            if st.button("🚀 Finalizar Carregamento & Emitir Cupom de Saída (2 Vias)", type="primary", use_container_width=True):
+                if not todas_embarcadas:
+                    st.warning("⚠️ Atenção: Existem empresas da rota que não foram marcadas como embarcadas!")
+
+                tot_trop_carg = sum([int(r.get("caixas_tropical", 0)) for r in empresas_embarcadas]) if empresas_embarcadas else 0
+                tot_ovos_carg = sum([int(r.get("caixas_ovos", 0)) for r in empresas_embarcadas]) if empresas_embarcadas else 0
+
+                st.success("✅ Carregamento Concluído! O Módulo de Entregas no Cliente foi liberado automaticamente!")
+
+                st.markdown("### 🧾 CUPOM DE SAÍDA (2 VIAS)")
+                if st.button("🖨️ Imprimir Cupom de Saída", type="primary"):
+                    st.components.v1.html("<script>window.print();</script>", height=0)
+
+                for via in ["1ª VIA — GALPÃO / EXPEDIÇÃO", "2ª VIA — MOTORISTA / TRANSPORTE"]:
+                    html_cupom = f"""
+                    <div style="border:2px dashed #000; padding:15px; margin-bottom:20px; font-family:Arial, sans-serif; background-color:#fff; color:#000;">
+                        <div style="text-align:center; border-bottom:1px solid #000; padding-bottom:5px;">
+                            <h3 style="margin:0;">🌴 MÓDULO TROPICAL — CUPOM DE SAÍDA</h3>
+                            <h4 style="margin:3px 0;">{via}</h4>
+                            <p style="margin:0; font-size:12px;">Data: {HOJE_STR} | Placa: {placa_veiculo} | Motorista: {motorista_nome}</p>
+                        </div>
+                        <div style="margin-top:10px; font-size:13px;">
+                            <p><strong>Picking:</strong> {cod_pick_input.strip()}</p>
+                            <p><strong>Total Caixas Tropical Embarcadas:</strong> {tot_trop_carg} cx</p>
+                            <p><strong>Total Volumes de Ovos Embarcados:</strong> {tot_ovos_carg} vol</p>
+                            <p><strong>Empresas Embarcadas:</strong> {len(empresas_embarcadas)} unidades</p>
+                        </div>
+                        <div style="margin-top:20px; display:flex; justify-content:space-between; font-size:11px; text-align:center;">
+                            <div>___________________________________<br>Assinatura Expedição</div>
+                            <div>___________________________________<br>Assinatura Motorista</div>
+                        </div>
+                    </div>
+                    """
+                    st.markdown(html_cupom, unsafe_allow_html=True)
+        else:
+            st.info("Nenhuma conferência finalizada encontrada para a data de hoje.")
+
+# -------------------------------------------------------------------
+# 7. ENTREGAS & DEVOLUÇÃO DE CAIXAS
+# -------------------------------------------------------------------
+elif modulo == "📍 7. Entregas & Devolução de Caixas":
+    st.header("📍 Módulo de Entrega no Cliente & Controle de Vasilhames")
+    st.caption("Acompanhamento das paradas do caminhão e acerto de vasilhames (Caixas Tropical).")
+
+    res_conf = []
+    if supabase:
+        try:
+            r = supabase.table("conferencia").select("*").eq("data_registro", HOJE_STR).execute()
+            res_conf = r.data if r.data else []
+        except Exception:
+            res_conf = []
+
+    df_conf = pd.DataFrame(res_conf) if res_conf else pd.DataFrame()
+
+    if not df_conf.empty:
+        st.subheader("🏢 Roteiro de Entregas do Veículo")
+        
+        for idx, row in df_conf.iterrows():
+            with st.expander(f"📍 Parada {idx+1}: {row.get('cliente')} — Pedido `{row.get('numreq')}`"):
+                st.write(f"🚚 **Rota:** {row.get('rota')}")
+                st.write(f"📦 **Caixas Tropical Esperadas:** {row.get('caixas_tropical')} cx")
+                st.write(f"🥚 **Ovos:** {row.get('desc_ovos')}")
+
+                st.markdown("---")
+                st.markdown("#### 🔄 Acerto de Vasilhame na Entrega")
+                c_ent1, c_ent2 = st.columns(2)
+                with c_ent1:
+                    cx_deixadas = st.number_input(f"Caixas Tropical Deixadas ({row.get('numreq')}):", min_value=0, value=int(row.get('caixas_tropical', 0)), key=f"deix_{idx}")
+                with c_ent2:
+                    cx_retiradas = st.number_input(f"Caixas Tropical Retiradas (Vazia):", min_value=0, value=0, key=f"ret_{idx}")
+
+                obs_entrega = st.text_input(f"Observação do Recebedor / Assinatura:", key=f"obs_{idx}")
+
+                if st.button(f"✅ Confirmar Entrega em {row.get('cliente')}", key=f"btn_ent_{idx}", type="primary"):
+                    dados_baixa = {
+                        "numreq": row.get('numreq'),
+                        "cliente": row.get('cliente'),
+                        "caixas_deixadas": int(cx_deixadas),
+                        "caixas_retiradas": int(cx_retiradas),
+                        "obs": obs_entrega,
+                        "data_registro": HOJE_STR,
+                        "status": "ENTREGUE"
+                    }
+                    if supabase:
+                        try:
+                            supabase.table("entregas").insert(dados_baixa).execute()
+                            st.success(f"✅ Entrega confirmada! Saldo do cliente atualizado: +{cx_deixadas} / -{cx_retiradas} Caixas Tropical.")
+                        except Exception as e:
+                            st.error(f"Erro ao registrar baixa: {e}")
+                    else:
+                        st.success(f"✅ Entrega de {row.get('cliente')} confirmada localmente!")
+    else:
+        st.info("Nenhuma carga liberada para entrega no momento. Realize a conferência e o carregamento do veículo primeiro.")
+
+# -------------------------------------------------------------------
+# CADASTROS E AUXILIARES
 # -------------------------------------------------------------------
 elif modulo == "🗺️ Endereços das Escolas":
     st.header("🗺️ Base de Endereços das Escolas & Pontos de Entrega")
@@ -721,19 +772,12 @@ elif modulo == "🗺️ Endereços das Escolas":
     if file_end:
         st.success("Base de endereços pronta para salvamento!")
 
-# -------------------------------------------------------------------
-# 9. CONTROLE DE CAIXAS & FORNECEDORES
-# -------------------------------------------------------------------
 elif modulo == "📦 Controle de Caixas & Fornecedores":
     st.header("📦 Gestão de Embalagens e Entrada/Saída com Fornecedores")
-    st.subheader("Registro de Entrada e Saída de Embalagens")
     sel_caixa = st.selectbox("Tipo de Embalagem", ["Caixa Tropical", "Monobloco Plástico Preto", "Palete PBR"])
     if st.button("Registrar Movimentação"):
         st.success("Movimentação salva com sucesso!")
 
-# -------------------------------------------------------------------
-# 10. LANÇAMENTOS AVULSOS
-# -------------------------------------------------------------------
 elif modulo == "✏️ Lançamentos Avulsos":
     st.header("✏️ Lançamentos Avulsos e Ajustes de Estoque")
     st.success("Módulo de lançamentos ativado.")
